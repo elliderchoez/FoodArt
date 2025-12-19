@@ -39,3 +39,29 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.env
+.env.production
+
+# Build artifacts
+build/
+*.apk
+*.ipa
+
+# Yarn
+.yarn/
+.yarn/*
+!.yarn/cache
+!.yarn/releases
