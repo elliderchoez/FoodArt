@@ -1,0 +1,544 @@
+import React, { useState } from 'react';
+import {
+  View,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import { API_URL } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+
+export const RegisterScreen = ({ navigation }) => {
+  const { colors, isDarkMode } = useTheme();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
+  const [imagenPerfil, setImagenPerfil] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePassword = (password) => {
+    // Mínimo 6 caracteres y al menos una mayúscula
+    const passRegex = /^(?=.*[A-Z]).{6,}$/;
+    return passRegex.test(password);
+  };
+
+  const validateName = (name) => {
+    // Solo letras y espacios
+    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]*$/;
+    return nameRegex.test(name);
+  };
+
+  const handleNameChange = (text) => {
+    // Solo permite letras, acentos y espacios
+    if (validateName(text)) {
+      setName(text);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      // Solicitar permisos
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setImagenPerfil(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error al seleccionar imagen:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const takePicture = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu cámara');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setImagenPerfil(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error al tomar foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  const validate = () => {
+    if (!validateName(name.trim())) {
+      Alert.alert('Error', 'El nombre solo debe contener letras y espacios');
+      return false;
+    }
+
+    if (!validateEmail(email.trim())) {
+      Alert.alert('Error', 'Email inválido');
+      return false;
+    }
+
+    if (!validatePassword(password)) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres y una mayúscula');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Las contraseñas no coinciden');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleRegister = async () => {
+    if (!validate()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let imagenUrl = null;
+
+      // Si hay imagen, subirla primero
+      if (imagenPerfil) {
+        try {
+          const formData = new FormData();
+          const filename = imagenPerfil.uri.split('/').pop();
+          
+          formData.append('image', {
+            uri: imagenPerfil.uri,
+            name: filename,
+            type: 'image/jpeg',
+          });
+
+          console.log('Subiendo imagen...');
+          const uploadResponse = await fetch(`${API_URL}/upload-image`, {
+            method: 'POST',
+            body: formData,
+          });
+
+          const uploadDataText = await uploadResponse.text();
+          console.log('Upload response text:', uploadDataText);
+          const uploadData = JSON.parse(uploadDataText);
+          console.log('Upload data parsed:', uploadData);
+
+          if (!uploadResponse.ok) {
+            console.error('Upload error:', uploadData);
+            Alert.alert('Error en imagen', uploadData.message || 'No se pudo subir la imagen');
+            return;
+          }
+
+          // El servidor retorna URL completa
+          imagenUrl = uploadData.url;
+          console.log('Imagen URL final:', imagenUrl);
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          Alert.alert('Error', 'No se pudo procesar la imagen');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Luego registrar usuario
+      const registerData = {
+        name: name.trim(),
+        email: email.trim(),
+        password: password.trim(),
+        password_confirmation: confirmPassword.trim(),
+        descripcion: descripcion.trim(),
+      };
+
+      if (imagenUrl) {
+        registerData.imagen_perfil = imagenUrl;
+      }
+
+      console.log('Datos de registro:', registerData);
+
+      const response = await fetch(`${API_URL}/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registerData),
+      });
+
+      const data = await response.json();
+      console.log('Response status:', response.status);
+      console.log('Response data:', data);
+
+      if (response.ok) {
+        Alert.alert('Éxito', 'Cuenta creada correctamente. Ahora inicia sesión.');
+        navigation.replace('Login');
+      } else {
+        const errorMessage = data.message || data.error || 'Error al registrarse';
+        Alert.alert('Error', errorMessage);
+      }
+    } catch (error) {
+      console.error('Error en registro:', error);
+      Alert.alert('Error', 'No se pudo conectar con el servidor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Logo */}
+        <Image
+          source={require('../../assets/logo.png')}
+          style={styles.logo}
+        />
+
+        {/* Título */}
+        <Text style={[styles.title, { color: colors.text }]}>Crear una cuenta</Text>
+
+        {/* Tarjeta */}
+        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          {/* Selector de foto de perfil */}
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Foto de perfil</Text>
+
+          <View style={styles.imageContainer}>
+            {imagenPerfil ? (
+              <Image source={{ uri: imagenPerfil.uri }} style={styles.profileImage} />
+            ) : (
+              <View style={styles.placeholderImage}>
+                <Icon name="account-circle" size={64} color="#D4AF37" />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.buttonGroup}>
+            <TouchableOpacity
+              style={[styles.imageButton, styles.cameraButton]}
+              onPress={takePicture}
+              disabled={loading}
+            >
+              <Icon name="camera" size={20} color="#FFFFFF" />
+              <Text style={styles.imageButtonText}>Cámara</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.imageButton, styles.galleryButton]}
+              onPress={pickImage}
+              disabled={loading}
+            >
+              <Icon name="image" size={20} color="#FFFFFF" />
+              <Text style={styles.imageButtonText}>Galería</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Nombre */}
+          <TextInput
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+            placeholder="Nombre completo"
+            placeholderTextColor={colors.textSecondary}
+            value={name}
+            onChangeText={handleNameChange}
+            editable={!loading}
+            maxLength={255}
+          />
+
+          {/* Email */}
+          <TextInput
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+            placeholder="Correo electrónico"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!loading}
+          />
+
+          {/* Descripción */}
+          <TextInput
+            style={[styles.input, styles.descriptionInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+            placeholder="Descripción (opcional)"
+            placeholderTextColor={colors.textSecondary}
+            value={descripcion}
+            onChangeText={setDescripcion}
+            editable={!loading}
+            multiline
+            numberOfLines={3}
+          />
+
+          {/* Contraseña */}
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Contraseña"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!passwordVisible}
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={styles.visibilityButton}
+              onPress={() => setPasswordVisible(!passwordVisible)}
+              disabled={loading}
+            >
+              <Icon
+                name={passwordVisible ? 'eye' : 'eye-off'}
+                size={24}
+                color="#D4AF37"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.passwordRule}>
+            Mínimo 6 caracteres, una mayúscula
+          </Text>
+
+          {/* Confirmar Contraseña */}
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Confirmar contraseña"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!confirmPasswordVisible}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={styles.visibilityButton}
+              onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+              disabled={loading}
+            >
+              <Icon
+                name={confirmPasswordVisible ? 'eye' : 'eye-off'}
+                size={24}
+                color="#D4AF37"
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Botón Registrarse */}
+          <TouchableOpacity
+            style={[styles.button, styles.registerButton, loading && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.buttonText}>Registrarse</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Link a Login */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Login')}
+            disabled={loading}
+          >
+            <Text style={styles.loginLink}>¿Ya tienes una cuenta? Inicia sesión</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer */}
+        <Text style={styles.footer}>© Food Art</Text>
+      </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#D4AF37',
+  },
+  placeholderImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#D4AF37',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  imageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  cameraButton: {
+    backgroundColor: '#D4AF37',
+  },
+  galleryButton: {
+    backgroundColor: '#6366F1',
+  },
+  imageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D4AF37',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 16,
+    color: '#1F2937',
+    minHeight: 48,
+  },
+  descriptionInput: {
+    minHeight: 90,
+    textAlignVertical: 'top',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D4AF37',
+    borderRadius: 8,
+    marginBottom: 4,
+    paddingRight: 10,
+    minHeight: 48,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  visibilityButton: {
+    padding: 10,
+  },
+  passwordRule: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 12,
+    paddingLeft: 4,
+  },
+  button: {
+    height: 48,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  registerButton: {
+    backgroundColor: '#D4AF37',
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  loginLink: {
+    color: '#D4AF37',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 15,
+    textDecorationLine: 'underline',
+  },
+  footer: {
+    color: '#6B7280',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+    opacity: 0.7,
+  },
+});

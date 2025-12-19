@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Receta extends Model
+{
+    use HasFactory;
+
+    protected $table = 'recetas';
+
+    protected $fillable = [
+        'user_id',
+        'titulo',
+        'descripcion',
+        'imagen_url',
+        'tiempo_preparacion',
+        'porciones',
+        'dificultad',
+        'ingredientes',
+        'pasos',
+        'categoria',
+        'likes_count',
+        'comentarios_count',
+    ];
+
+    protected $casts = [
+        'ingredientes' => 'array',
+        'pasos' => 'array',
+    ];
+
+    // Relaciones
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function likes()
+    {
+        return $this->hasMany(Like::class, 'receta_id');
+    }
+
+    public function comentarios()
+    {
+        return $this->hasMany(Comentario::class, 'receta_id');
+    }
+
+    public function recetasGuardadas()
+    {
+        return $this->hasMany(RecetaGuardada::class, 'receta_id');
+    }
+
+    // Scope: obtener recetas ordenadas por fecha
+    public function scopeLatest($query)
+    {
+        return $query->orderBy('created_at', 'desc');
+    }
+
+    // Scope: obtener recetas populares
+    public function scopePopular($query)
+    {
+        return $query->orderBy('likes_count', 'desc');
+    }
+}
