@@ -46,7 +46,7 @@ const ComentarioItem = ({ comentario, colors }) => (
         style={styles.comentarioAvatar}
       />
       <View style={styles.comentarioInfo}>
-        <Text style={styles.comentarioUserName}>{comentario.user?.name || 'Usuario'}</Text>
+        <Text style={[styles.comentarioUserName, { color: colors.text }]}>{comentario.user?.name || 'Usuario'}</Text>
         <View style={styles.ratingContainer}>
           {[...Array(5)].map((_, i) => (
             <MaterialCommunityIcons
@@ -59,7 +59,7 @@ const ComentarioItem = ({ comentario, colors }) => (
         </View>
       </View>
     </View>
-    <Text style={styles.comentarioText}>{comentario.contenido}</Text>
+    <Text style={[styles.comentarioText, { color: colors.textSecondary }]}>{comentario.contenido}</Text>
   </View>
 );
 
@@ -344,14 +344,17 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         />
 
         {/* Usuario */}
-        <TouchableOpacity style={styles.userSection} onPress={irAlPerfilUsuario}>
+        <TouchableOpacity
+          style={[styles.userSection, { borderBottomColor: colors.border }]}
+          onPress={irAlPerfilUsuario}
+        >
           <Image
             source={{ uri: recetaCompleta.user?.imagen_perfil || 'https://via.placeholder.com/48' }}
             style={styles.userAvatar}
           />
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{recetaCompleta.user?.name || 'Usuario'}</Text>
-            <Text style={styles.userDate}>Receta</Text>
+            <Text style={[styles.userName, { color: colors.text }]}>{recetaCompleta.user?.name || 'Usuario'}</Text>
+            <Text style={[styles.userDate, { color: colors.textSecondary }]}>Receta</Text>
           </View>
           {!esMiReceta && (
             <TouchableOpacity
@@ -369,7 +372,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         </TouchableOpacity>
 
         {/* Acciones */}
-        <View style={styles.actionsContainer}>
+        <View style={[styles.actionsContainer, { borderBottomColor: colors.border }]}>
           <TouchableOpacity
             style={[styles.actionBtn, liked && styles.actionBtnActive]}
             onPress={toggleLike}
@@ -379,12 +382,12 @@ export default function DetalleRecetaScreen({ route, navigation }) {
               size={24}
               color={liked ? '#FF4757' : '#D4AF37'}
             />
-            <Text style={styles.actionLabel}>{recetaCompleta.likes_count || 0}</Text>
+            <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>{recetaCompleta.likes_count || 0}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionBtn}>
             <MaterialCommunityIcons name="comment-outline" size={24} color="#D4AF37" />
-            <Text style={styles.actionLabel}>{recetaCompleta.comentarios_count || 0}</Text>
+            <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>{recetaCompleta.comentarios_count || 0}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -404,29 +407,29 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         </View>
 
         {/* Info rápida */}
-        <View style={styles.infoGrid}>
+        <View style={[styles.infoGrid, { backgroundColor: colors.surface }]}>
           <View style={styles.infoBox}>
             <MaterialCommunityIcons name="clock-outline" size={24} color="#FF6B35" />
-            <Text style={styles.infoValue}>{recetaCompleta.tiempo_preparacion} min</Text>
-            <Text style={styles.infoLabel}>Tiempo</Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>{recetaCompleta.tiempo_preparacion} min</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Tiempo</Text>
           </View>
 
           <View style={styles.infoBox}>
             <MaterialCommunityIcons name="pot-mix" size={24} color="#4CAF50" />
-            <Text style={styles.infoValue}>{recetaCompleta.porciones}</Text>
-            <Text style={styles.infoLabel}>Porciones</Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>{recetaCompleta.porciones}</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Porciones</Text>
           </View>
 
           <View style={styles.infoBox}>
             <MaterialCommunityIcons name="fire" size={24} color="#2196F3" />
-            <Text style={styles.infoValue}>{recetaCompleta.dificultad}</Text>
-            <Text style={styles.infoLabel}>Dificultad</Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>{recetaCompleta.dificultad}</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Dificultad</Text>
           </View>
         </View>
 
         {/* Descripción */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Descripción</Text>
+        <View style={[styles.sectionContainer, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Descripción</Text>
           <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>{recetaCompleta.descripcion}</Text>
         </View>
 
@@ -447,9 +450,9 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         </View>
 
         {/* Reseñas */}
-        <View style={styles.sectionContainer}>
+        <View style={[styles.sectionContainer, { backgroundColor: colors.background }]}>
           <View style={styles.resenaHeader}>
-            <Text style={styles.sectionTitle}>Reseñas</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Reseñas</Text>
             <TouchableOpacity
               style={styles.agregarResenaBtn}
               onPress={() => setMostrarModalResena(true)}
@@ -490,16 +493,16 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           style={styles.modalContainer}
         >
           <View style={styles.modalOverlay} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Agregar reseña</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}> 
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}> 
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Agregar reseña</Text>
               <TouchableOpacity onPress={() => setMostrarModalResena(false)}>
-                <MaterialCommunityIcons name="close" size={24} color="#000" />
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalBody}>
-              <Text style={styles.modalLabel}>Calificación</Text>
+              <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Calificación</Text>
               <View style={styles.ratingSelector}>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <TouchableOpacity
@@ -515,15 +518,15 @@ export default function DetalleRecetaScreen({ route, navigation }) {
                 ))}
               </View>
 
-              <Text style={styles.modalLabel}>Tu comentario</Text>
+              <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Tu comentario</Text>
               <TextInput
-                style={styles.commentInput}
+                style={[styles.commentInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
                 placeholder="Comparte tu experiencia con esta receta..."
                 value={nuevoComentario}
                 onChangeText={setNuevoComentario}
                 multiline
                 numberOfLines={4}
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSecondary}
               />
             </ScrollView>
 
@@ -532,7 +535,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
                 style={styles.modalCancelBtn}
                 onPress={() => setMostrarModalResena(false)}
               >
-                <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+                <Text style={[styles.modalCancelBtnText, { color: colors.text }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalPublishBtn}

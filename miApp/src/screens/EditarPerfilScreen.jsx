@@ -15,8 +15,10 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 export const EditarPerfilScreen = ({ navigation, route }) => {
+  const { colors } = useTheme();
   const { usuario } = route.params || {};
   const [nombre, setNombre] = useState(usuario?.name || '');
   const [descripcion, setDescripcion] = useState(usuario?.descripcion || '');
@@ -186,17 +188,17 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color="#1F2937" />
+          <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Editar perfil</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Editar perfil</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
-        style={styles.content}
+        style={[styles.content, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
@@ -222,16 +224,16 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
               <Icon name="camera-plus" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.fotoHint}>Toca para cambiar foto de perfil</Text>
+          <Text style={[styles.fotoHint, { color: colors.textSecondary }]}>Toca para cambiar foto de perfil</Text>
         </View>
 
         {/* Nombre */}
         <View style={styles.section}>
-          <Text style={styles.label}>Nombre</Text>
+          <Text style={[styles.label, { color: colors.text }]}>Nombre</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
             placeholder="Tu nombre"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textSecondary}
             value={nombre}
             onChangeText={setNombre}
             editable={!loading}
@@ -240,19 +242,19 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
 
         {/* Descripción */}
         <View style={styles.section}>
-          <Text style={styles.label}>Descripción</Text>
+          <Text style={[styles.label, { color: colors.text }]}>Descripción</Text>
           <TextInput
-            style={[styles.input, styles.descriptionInput]}
+            style={[styles.input, styles.descriptionInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
             placeholder="Escribe sobre ti (máx 150 caracteres)"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textSecondary}
             value={descripcion}
             onChangeText={setDescripcion}
             multiline
             maxLength={150}
             editable={!loading}
           />
-          <Text style={styles.charCount}>{descripcion.length}/150</Text>
-          <Text style={styles.hint}>
+          <Text style={[styles.charCount, { color: colors.textSecondary }]}>{descripcion.length}/150</Text>
+          <Text style={[styles.hint, { color: colors.textSecondary }]}>
             Proporciona tu nombre y una descripción sobre ti. Esta información será visible para otros usuarios.
           </Text>
         </View>

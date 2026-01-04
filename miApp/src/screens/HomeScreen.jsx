@@ -362,8 +362,8 @@ export const HomeScreen = ({ navigation }) => {
       ) : postsFiltrados.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
-          <Text style={styles.emptyText}>No hay recetas aún</Text>
-          <Text style={styles.emptySubtext}>Las recetas aparecerán aquí</Text>
+          <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas aún</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Las recetas aparecerán aquí</Text>
         </View>
       ) : (
         <FlatList
