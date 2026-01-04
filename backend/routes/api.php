@@ -50,5 +50,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/usuarios/{id}/seguir', [SeguidorController::class, 'seguir']);
     Route::post('/usuarios/{id}/dejar-de-seguir', [SeguidorController::class, 'dejarDeSeguir']);
     Route::get('/usuarios/{id}/verificar-seguimiento', [SeguidorController::class, 'verificarSeguimiento']);
+
+    // Notificaciones
+    Route::post('/notifications/register-token', [AuthController::class, 'registerNotificationToken']);
+    Route::post('/notifications/send-test', [AuthController::class, 'sendTestNotification']);
+    Route::get('/notifications', [AuthController::class, 'getNotifications']);
+    Route::put('/notifications/{id}/read', [AuthController::class, 'markNotificationAsRead']);
+    Route::delete('/notifications/{id}', [AuthController::class, 'deleteNotification']);
 });
 

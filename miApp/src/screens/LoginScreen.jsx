@@ -18,6 +18,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { API_URL } from '../services/api';
 import { UsuarioManager } from '../services/UsuarioManager';
 import { useTheme } from '../context/ThemeContext';
+import { getStoredToken } from '../services/notificationService';
 
 export const LoginScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
@@ -83,6 +84,29 @@ export const LoginScreen = ({ navigation }) => {
         // Sincronizar datos del usuario
         await UsuarioManager.sincronizarDesdeAPI(data.token);
         const userName = await UsuarioManager.obtenerNombre();
+
+        // Registrar token de notificaciones (si existe)
+        try {
+          const pushToken = await getStoredToken();
+          if (pushToken) {
+            const registerResponse = await fetch(`${API_URL}/notifications/register-token`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${data.token}`,
+              },
+              body: JSON.stringify({ token: pushToken }),
+            });
+            if (registerResponse.ok) {
+              console.log('✅ Token de notificaciones registrado en el backend');
+            }
+          } else {
+            console.warn('⚠️ No hay token de notificaciones (Expo Go limitación)');
+          }
+        } catch (error) {
+          console.warn('Advertencia registrando token:', error.message);
+          // Continuamos aunque falle el registro de notificaciones
+        }
 
         Alert.alert('Bienvenido', `¡Hola ${userName}!`);
         navigation.replace('Home');

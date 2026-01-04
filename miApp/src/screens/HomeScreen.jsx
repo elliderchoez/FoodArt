@@ -15,6 +15,21 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useNotificationCount } from '../context/NotificationContext';
+
+// Componente de Botón de Navegación con Badge
+const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount }) => (
+  <View style={styles.navButtonContainer}>
+    <TouchableOpacity style={styles.navButton} onPress={onPress}>
+      <Icon name={icon} size={24} color={colors.textSecondary} />
+    </TouchableOpacity>
+    {badgeCount > 0 && (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+      </View>
+    )}
+  </View>
+);
 
 const categorias = [
   { id: 1, nombre: 'Todas', emoji: '🍽️', seleccionada: true },
@@ -172,6 +187,7 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
 
 export const HomeScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
+  const { unreadCount } = useNotificationCount();
   const [categoria, setCategoria] = useState('Todas');
   const [posts, setPosts] = useState([]);
   const [postsFiltrados, setPostsFiltrados] = useState([]);
@@ -187,10 +203,31 @@ export const HomeScreen = ({ navigation }) => {
     React.useCallback(() => {
       if (token) {
         cargarRecetas(token);
+        cargarNotificacionesPendientes(token);
       }
       return () => {};
     }, [token])
   );
+
+  const cargarNotificacionesPendientes = async (tk) => {
+    try {
+      const response = await fetch(`${API_URL}/notifications`, {
+        headers: {
+          'Authorization': `Bearer ${tk}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const notificaciones = data.data || [];
+        const noLeidas = notificaciones.filter((n) => !n.read).length;
+        // No necesitamos actualizar aquí porque AlertasScreen ya lo hace
+      }
+    } catch (error) {
+      console.error('Error cargando notificaciones pendientes:', error);
+    }
+  };
 
   const obtenerToken = async () => {
     try {
@@ -357,9 +394,12 @@ export const HomeScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.navButton} onPress={() => irA('CrearReceta')}>
           <Icon name="plus-circle" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Alertas')}>
-          <Icon name="bell-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <NavButtonWithBadge 
+          icon="bell-outline" 
+          onPress={() => irA('Alertas')} 
+          colors={colors}
+          badgeCount={unreadCount}
+        />
         <TouchableOpacity style={styles.navButton} onPress={() => irA('Perfil')}>
           <Icon name="account-circle-outline" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -541,5 +581,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  navButtonContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
