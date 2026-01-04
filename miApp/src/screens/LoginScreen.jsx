@@ -91,7 +91,7 @@ export const LoginScreen = ({ navigation }) => {
 
         // Sincronizar datos del usuario
         await UsuarioManager.sincronizarDesdeAPI(data.token);
-        const userName = await UsuarioManager.obtenerNombre();
+        await UsuarioManager.obtenerNombre();
 
         // Registrar token de notificaciones (si existe)
         try {
@@ -116,7 +116,6 @@ export const LoginScreen = ({ navigation }) => {
           // Continuamos aunque falle el registro de notificaciones
         }
 
-        Alert.alert('Bienvenido', `¡Hola ${userName}!`);
         navigation.replace('Home');
       } else {
         // Laravel puede responder {message} o {errors:{...}}
@@ -191,7 +190,7 @@ export const LoginScreen = ({ navigation }) => {
               <View style={[styles.inputContainer, { borderColor: errors.password ? colors.error : colors.border, backgroundColor: colors.surface }]}>
                 <TextInput
                   style={[styles.input, { color: colors.text }]}
-                  placeholder="••••••••"
+                  placeholder="Contraseña"
                   placeholderTextColor={colors.textSecondary}
                   secureTextEntry={!passwordVisible}
                   value={password}
