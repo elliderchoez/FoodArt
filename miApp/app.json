@@ -3,6 +3,7 @@
     "name": "miApp",
     "slug": "miApp",
     "version": "1.0.0",
+    "projectId": "9af204a6-dd25-4b88-b858-3e561154108e",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
