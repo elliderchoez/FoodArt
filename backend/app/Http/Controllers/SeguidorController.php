@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Seguidor;
+use App\Services\ExpoNotificationService;
 use Illuminate\Http\Request;
 
 class SeguidorController extends Controller
@@ -46,6 +47,24 @@ class SeguidorController extends Controller
                 'usuario_id' => $usuarioId,
                 'seguidor_id' => $usuarioActual->id,
             ]);
+
+            // Guardar notificación en BD
+            \App\Models\Notification::create([
+                'user_id' => $usuario->id,
+                'from_user_id' => $usuarioActual->id,
+                'type' => 'follow',
+                'title' => '👥 ' . $usuarioActual->name . ' empezó a seguirte',
+                'body' => 'Comparte tus recetas con ' . $usuarioActual->name,
+            ]);
+
+            // Enviar notificación push si tiene token registrado
+            if ($usuario->expo_push_token) {
+                ExpoNotificationService::notifyFollow(
+                    $usuario->expo_push_token,
+                    $usuarioActual->name,
+                    $usuarioActual->id
+                );
+            }
 
             return response()->json([
                 'message' => 'Siguiendo usuario',

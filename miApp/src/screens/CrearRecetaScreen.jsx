@@ -15,8 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.100.29:8000/api';
+import { API_URL } from '../services/api';
 
 export default function CrearRecetaScreen({ navigation }) {
   const [titulo, setTitulo] = useState('');

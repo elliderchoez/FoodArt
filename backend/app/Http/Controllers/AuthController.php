@@ -168,8 +168,11 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Invalid file'], 400);
             }
 
-            $path = $file->store('perfil', 'public');
-            $fullUrl = url(Storage::url($path));
+            // Guardar en public/uploads para acceso directo
+            $fileName = 'receta_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads'), $fileName);
+            
+            $fullUrl = url('/uploads/' . $fileName);
 
             return response()->json([
                 'url' => $fullUrl,
@@ -197,5 +200,137 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Se ha enviado un enlace de recuperación a tu email',
         ], 200);
+    }
+
+    /**
+     * Registrar token de notificación del dispositivo
+     */
+    public function registerNotificationToken(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'token' => 'required|string',
+            ]);
+
+            $user = $request->user();
+            $user->expo_push_token = $validated['token'];
+            $user->save();
+
+            return response()->json([
+                'message' => 'Token registrado exitosamente',
+                'token' => $user->expo_push_token,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error registrando token: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Enviar notificación de prueba
+     */
+    public function sendTestNotification(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->expo_push_token) {
+                return response()->json([
+                    'message' => 'El usuario no tiene token de notificación registrado',
+                ], 400);
+            }
+
+            return response()->json([
+                'message' => 'Este endpoint solo está disponible en ambiente de prueba',
+            ], 403);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Obtener notificaciones del usuario
+     */
+    public function getNotifications(Request $request)
+    {
+        try {
+            $user = $request->user();
+            
+            $notifications = \App\Models\Notification::where('user_id', $user->id)
+                ->with('fromUser')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($notification) {
+                    return [
+                        'id' => $notification->id,
+                        'title' => $notification->title,
+                        'body' => $notification->body,
+                        'type' => $notification->type,
+                        'read' => $notification->read,
+                        'timestamp' => $notification->created_at,
+                        'data' => [
+                            'type' => $notification->type,
+                            'recipeId' => $notification->recipe_id,
+                            'userId' => $notification->from_user_id,
+                            'userName' => $notification->fromUser->name ?? null,
+                        ]
+                    ];
+                });
+
+            return response()->json($notifications, 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error obteniendo notificaciones: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Marcar notificación como leída
+     */
+    public function markNotificationAsRead(Request $request, $id)
+    {
+        try {
+            $notification = \App\Models\Notification::findOrFail($id);
+            
+            // Verificar que sea del usuario
+            if ($notification->user_id !== $request->user()->id) {
+                return response()->json(['message' => 'No tienes permiso'], 403);
+            }
+
+            $notification->update(['read' => true]);
+
+            return response()->json(['message' => 'Notificación marcada como leída'], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Eliminar notificación
+     */
+    public function deleteNotification(Request $request, $id)
+    {
+        try {
+            $notification = \App\Models\Notification::findOrFail($id);
+            
+            // Verificar que sea del usuario
+            if ($notification->user_id !== $request->user()->id) {
+                return response()->json(['message' => 'No tienes permiso'], 403);
+            }
+
+            $notification->delete();
+
+            return response()->json(['message' => 'Notificación eliminada'], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 400);
+        }
     }
 }

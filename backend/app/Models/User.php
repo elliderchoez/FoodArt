@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'descripcion',
         'imagen_perfil',
+        'expo_push_token',
     ];
 
     /**
