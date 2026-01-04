@@ -193,6 +193,8 @@ export const LoginScreen = ({ navigation }) => {
                   placeholder="Contraseña"
                   placeholderTextColor={colors.textSecondary}
                   secureTextEntry={!passwordVisible}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                   value={password}
                   onChangeText={(v) => {
                     setPassword(v);

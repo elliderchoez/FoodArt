@@ -344,6 +344,8 @@ export const RegisterScreen = ({ navigation }) => {
               placeholder="Contraseña"
               placeholderTextColor={colors.textSecondary}
               secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
               value={password}
               onChangeText={(v) => {
                 setPassword(v);
@@ -378,6 +380,8 @@ export const RegisterScreen = ({ navigation }) => {
               placeholder="Confirmar contraseña"
               placeholderTextColor={colors.textSecondary}
               secureTextEntry={!confirmPasswordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
               value={confirmPassword}
               onChangeText={(v) => {
                 setConfirmPassword(v);

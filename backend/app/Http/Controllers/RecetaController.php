@@ -18,9 +18,12 @@ class RecetaController extends Controller
     public function index(Request $request)
     {
         try {
+            $perPage = (int) $request->query('per_page', 10);
+            $perPage = max(1, min($perPage, 50));
+
             $recetas = Receta::with(['user'])
                 ->latest()
-                ->paginate(15);
+                ->paginate($perPage);
 
             // Obtener el usuario si está autenticado
             $user = null;

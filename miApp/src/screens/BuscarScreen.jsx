@@ -65,6 +65,47 @@ export const BuscarScreen = ({ navigation }) => {
   const [showFiltroModal, setShowFiltroModal] = useState(false);
   const [token, setToken] = useState(null);
 
+  const normalizeText = useCallback((value) => {
+    if (!value) return '';
+    return String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }, []);
+
+  const stemWord = useCallback((word) => {
+    const w = normalizeText(word);
+    if (!w) return '';
+
+    // Stemming muy simple para español (plural):
+    // - tacos -> taco
+    // - postres -> postre
+    // - tomates -> tomate
+    if (w.length <= 3) return w;
+    if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+    if (w.endsWith('s') && w.length > 3) return w.slice(0, -1);
+    return w;
+  }, [normalizeText]);
+
+  const tokenize = useCallback((value) => {
+    const n = normalizeText(value);
+    if (!n) return [];
+    return n.split(/[^a-z0-9]+/g).filter(Boolean);
+  }, [normalizeText]);
+
+  const buildSearchIndex = useCallback((receta) => {
+    const ingredientes = Array.isArray(receta?.ingredientes) ? receta.ingredientes : [];
+    const base = [receta?.titulo, receta?.descripcion, ...ingredientes].filter(Boolean).join(' ');
+    const tokens = tokenize(base).map(stemWord);
+    return ` ${tokens.join(' ')} `;
+  }, [stemWord, tokenize]);
+
+  const normalizeQueryForServer = useCallback((value) => {
+    const tokens = tokenize(value).map(stemWord);
+    return tokens.join(' ');
+  }, [stemWord, tokenize]);
+
   // Estado de filtros
   const [ordenamiento, setOrdenamiento] = useState('Fecha de publicación');
   const [incluye, setIncluye] = useState('');
@@ -188,7 +229,7 @@ export const BuscarScreen = ({ navigation }) => {
 
         if (hasServerSearch) {
           base = await cargarRecetasDesdeApi(tk, {
-            q: busqueda.trim(),
+            q: normalizeQueryForServer(busqueda.trim()),
             dificultad: dificultad,
             tiempo_max: tiempoMax ?? '',
             orden: serverOrden,
@@ -217,40 +258,39 @@ export const BuscarScreen = ({ navigation }) => {
   const aplicarFiltros = (query = busqueda, source = allRecetas) => {
     let resultado = Array.isArray(source) ? [...source] : [];
 
+    const queryTokens = tokenize(query).map(stemWord);
+
     // Filtro por texto (local extra: ingredientes)
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      resultado = resultado.filter(receta => {
-        const titulo = (receta.titulo || '').toLowerCase();
-        const descripcion = (receta.descripcion || '').toLowerCase();
-        const ingredientes = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
-        return (
-          titulo.includes(q) ||
-          descripcion.includes(q) ||
-          ingredientes.some((ing) => (ing || '').toLowerCase().includes(q))
-        );
+    if (queryTokens.length) {
+      resultado = resultado.filter((receta) => {
+        const index = buildSearchIndex(receta);
+        return queryTokens.every((t) => t && index.includes(` ${t} `));
       });
     }
 
     // Filtro ingredientes a incluir
     if (incluye.trim()) {
-      const ingredientesIncluir = incluye.split(',').map(ing => ing.trim().toLowerCase());
+      const ingredientesIncluir = incluye
+        .split(',')
+        .map((ing) => stemWord(ing))
+        .filter(Boolean);
       resultado = resultado.filter(receta => {
         const ingredientes = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
-        return ingredientesIncluir.every((inc) =>
-          ingredientes.some((ing) => (ing || '').toLowerCase().includes(inc))
-        );
+        const idx = ` ${ingredientes.flatMap((i) => tokenize(i).map(stemWord)).join(' ')} `;
+        return ingredientesIncluir.every((inc) => idx.includes(` ${inc} `));
       });
     }
 
     // Filtro ingredientes a excluir
     if (excluye.trim()) {
-      const ingredientesExcluir = excluye.split(',').map(ing => ing.trim().toLowerCase());
+      const ingredientesExcluir = excluye
+        .split(',')
+        .map((ing) => stemWord(ing))
+        .filter(Boolean);
       resultado = resultado.filter(receta => {
         const ingredientes = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
-        return ingredientesExcluir.every((exc) =>
-          !ingredientes.some((ing) => (ing || '').toLowerCase().includes(exc))
-        );
+        const idx = ` ${ingredientes.flatMap((i) => tokenize(i).map(stemWord)).join(' ')} `;
+        return ingredientesExcluir.every((exc) => !idx.includes(` ${exc} `));
       });
     }
 
@@ -265,9 +305,8 @@ export const BuscarScreen = ({ navigation }) => {
 
     // Filtro dificultad
     if (dificultad !== 'Cualquiera') {
-      resultado = resultado.filter(receta =>
-        receta.dificultad.toLowerCase().includes(dificultad.toLowerCase())
-      );
+      const diff = stemWord(dificultad);
+      resultado = resultado.filter((receta) => stemWord(receta.dificultad).includes(diff));
     }
 
     // Ordenamiento
@@ -318,6 +357,8 @@ export const BuscarScreen = ({ navigation }) => {
             placeholderTextColor={colors.textSecondary}
             value={busqueda}
             onChangeText={filtrarRecetas}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           {busqueda.length > 0 && (
             <TouchableOpacity onPress={limpiarBusqueda}>
