@@ -6,6 +6,7 @@ use App\Models\Receta;
 use App\Models\Like;
 use App\Models\Comentario;
 use App\Models\RecetaGuardada;
+use App\Services\ExpoNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -246,6 +247,7 @@ class RecetaController extends Controller
             }
 
             $userId = $request->user()->id;
+            $currentUser = $request->user();
 
             // Verificar si ya existe el like
             $like = Like::where('user_id', $userId)->where('receta_id', $id)->first();
@@ -264,6 +266,31 @@ class RecetaController extends Controller
                     'receta_id' => $id,
                 ]);
                 $receta->increment('likes_count');
+
+                // Enviar notificación al autor de la receta (si tiene token registrado)
+                $recetaAuthor = $receta->user;
+                if ($recetaAuthor) {
+                    // Guardar en BD
+                    \App\Models\Notification::create([
+                        'user_id' => $recetaAuthor->id,
+                        'from_user_id' => $currentUser->id,
+                        'type' => 'like',
+                        'title' => '❤️ ' . $currentUser->name . ' dio like',
+                        'body' => 'Le gustó tu receta: ' . $receta->titulo,
+                        'recipe_id' => $receta->id,
+                    ]);
+
+                    // Enviar push si tiene token
+                    if ($recetaAuthor->expo_push_token) {
+                        ExpoNotificationService::notifyLike(
+                            $recetaAuthor->expo_push_token,
+                            $currentUser->name,
+                            $receta->titulo,
+                            $receta->id
+                        );
+                    }
+                }
+
                 return response()->json([
                     'message' => 'Like agregado',
                     'liked' => true,

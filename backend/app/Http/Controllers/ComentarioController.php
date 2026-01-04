@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Comentario;
 use App\Models\Receta;
+use App\Services\ExpoNotificationService;
 use Illuminate\Http\Request;
 
 class ComentarioController extends Controller
@@ -44,14 +45,40 @@ class ComentarioController extends Controller
                 'calificacion' => 'nullable|integer|min:1|max:5',
             ]);
 
+            $currentUser = $request->user();
             $comentario = Comentario::create([
-                'user_id' => $request->user()->id,
+                'user_id' => $currentUser->id,
                 'receta_id' => $receta_id,
                 'contenido' => $validated['contenido'],
                 'calificacion' => $validated['calificacion'],
             ]);
 
             $receta->increment('comentarios_count');
+
+            // Guardar notificación en BD
+            $recetaAuthor = $receta->user;
+            if ($recetaAuthor) {
+                $preview = substr($validated['contenido'], 0, 50) . (strlen($validated['contenido']) > 50 ? '...' : '');
+                \App\Models\Notification::create([
+                    'user_id' => $recetaAuthor->id,
+                    'from_user_id' => $currentUser->id,
+                    'type' => 'comment',
+                    'title' => '💬 ' . $currentUser->name . ' comentó',
+                    'body' => $preview,
+                    'recipe_id' => $receta->id,
+                ]);
+
+                // Enviar push si tiene token
+                if ($recetaAuthor->expo_push_token) {
+                    ExpoNotificationService::notifyComment(
+                        $recetaAuthor->expo_push_token,
+                        $currentUser->name,
+                        $receta->titulo,
+                        $receta->id,
+                        $preview
+                    );
+                }
+            }
 
             return response()->json([
                 'message' => 'Comentario creado exitosamente',
