@@ -120,6 +120,26 @@ const API_URL = await getAPIURL();
 
 ---
 
+## ⚙️ Optimizaciones Realizadas (Extras)
+
+Además de la auto-detección de servidor, se optimizaron partes clave de la app para mejorar rendimiento, UX y estabilidad:
+
+### App (Frontend)
+- **Home con paginación real**: carga incremental (10 en 10), `pull-to-refresh` y mensaje de fin de lista.
+- **Buscador mejorado**: búsqueda con debounce para evitar “spam” al backend y filtros más tolerantes.
+- **Filtro inteligente**: búsqueda sin importar mayúsculas/acentos y con soporte básico singular/plural (ej. “tacos” ≈ “taco”).
+- **Modo oscuro consistente**: eliminación de textos hardcodeados que quedaban ilegibles en dark mode (pantallas y modales principales).
+- **UX de auth**: errores inline más claros (login/registro) y campos de contraseña sin autocapitalización.
+- **UI de categorías**: carrusel compacto y estilo tipo “bookmark/tab”, evitando recortes visuales.
+
+### API (Backend)
+- **Endpoint de recetas paginado**: soporte de `per_page` y `page` para que el feed del Home sea escalable.
+- **Búsqueda sin colisiones de rutas**: ajuste de `/recetas/search` para evitar conflictos con `/recetas/{id}`.
+- **Respuestas de login más específicas**: mensajes diferenciados (usuario no encontrado / contraseña incorrecta).
+- **Datos demo sociales**: seeder que genera usuarios/recetas/seguidores para pruebas rápidas.
+
+---
+
 ## ⚡ Tiempo Total de Implementación
 
 ```
