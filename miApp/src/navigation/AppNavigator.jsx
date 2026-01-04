@@ -21,7 +21,8 @@ export const AppNavigator = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          animationEnabled: true,
+          animationEnabled: false,
+          animation: 'none',
         }}
         initialRouteName="Splash"
       >

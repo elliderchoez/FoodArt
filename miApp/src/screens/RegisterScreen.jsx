@@ -29,6 +29,8 @@ export const RegisterScreen = ({ navigation }) => {
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [imagenPerfil, setImagenPerfil] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -103,27 +105,37 @@ export const RegisterScreen = ({ navigation }) => {
   };
 
   const validate = () => {
-    if (!validateName(name.trim())) {
-      Alert.alert('Error', 'El nombre solo debe contener letras y espacios');
-      return false;
+    const next = {};
+    const nameTrim = name.trim();
+    const emailTrim = email.trim();
+
+    if (!nameTrim) {
+      next.name = 'El nombre es obligatorio';
+    } else if (!validateName(nameTrim)) {
+      next.name = 'El nombre solo debe contener letras y espacios';
     }
 
-    if (!validateEmail(email.trim())) {
-      Alert.alert('Error', 'Email inválido');
-      return false;
+    if (!emailTrim) {
+      next.email = 'El correo es obligatorio';
+    } else if (!validateEmail(emailTrim)) {
+      next.email = 'Email inválido';
     }
 
-    if (!validatePassword(password)) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres y una mayúscula');
-      return false;
+    if (!password) {
+      next.password = 'La contraseña es obligatoria';
+    } else if (!validatePassword(password)) {
+      next.password = 'Mínimo 6 caracteres y una mayúscula';
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden');
-      return false;
+    if (!confirmPassword) {
+      next.confirmPassword = 'Confirma tu contraseña';
+    } else if (password !== confirmPassword) {
+      next.confirmPassword = 'Las contraseñas no coinciden';
     }
 
-    return true;
+    setErrors(next);
+    setFormError('');
+    return Object.keys(next).length === 0;
   };
 
   const handleRegister = async () => {
@@ -206,12 +218,19 @@ export const RegisterScreen = ({ navigation }) => {
         Alert.alert('Éxito', 'Cuenta creada correctamente. Ahora inicia sesión.');
         navigation.replace('Login');
       } else {
-        const errorMessage = data.message || data.error || 'Error al registrarse';
-        Alert.alert('Error', errorMessage);
+        const fieldMessages = data?.errors
+          ? Object.values(data.errors).flat().filter(Boolean)
+          : [];
+
+        if (fieldMessages.length) {
+          setFormError(fieldMessages.join('\n'));
+        } else {
+          setFormError(data?.message || data?.error || 'Error al registrarse');
+        }
       }
     } catch (error) {
       console.error('Error en registro:', error);
-      Alert.alert('Error', 'No se pudo conectar con el servidor');
+      setFormError('No se pudo conectar con el servidor');
     } finally {
       setLoading(false);
     }
@@ -232,6 +251,12 @@ export const RegisterScreen = ({ navigation }) => {
 
         {/* Tarjeta */}
         <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          {!!formError && (
+            <View style={[styles.formErrorBox, { borderColor: colors.error, backgroundColor: colors.surface }]}>
+              <Text style={[styles.formErrorText, { color: colors.error }]}>{formError}</Text>
+            </View>
+          )}
+
           {/* Selector de foto de perfil */}
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Foto de perfil</Text>
 
@@ -267,26 +292,38 @@ export const RegisterScreen = ({ navigation }) => {
 
           {/* Nombre */}
           <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: errors.name ? colors.error : colors.border }]}
             placeholder="Nombre completo"
             placeholderTextColor={colors.textSecondary}
             value={name}
-            onChangeText={handleNameChange}
+            onChangeText={(v) => {
+              handleNameChange(v);
+              if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+            }}
             editable={!loading}
             maxLength={255}
           />
+          {!!errors.name && (
+            <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.name}</Text>
+          )}
 
           {/* Email */}
           <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: errors.email ? colors.error : colors.border }]}
             placeholder="Correo electrónico"
             placeholderTextColor={colors.textSecondary}
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+            }}
             editable={!loading}
           />
+          {!!errors.email && (
+            <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.email}</Text>
+          )}
 
           {/* Descripción */}
           <TextInput
@@ -303,12 +340,15 @@ export const RegisterScreen = ({ navigation }) => {
           {/* Contraseña */}
           <View style={styles.passwordContainer}>
             <TextInput
-              style={styles.passwordInput}
+              style={[styles.passwordInput, { color: colors.text }]}
               placeholder="Contraseña"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textSecondary}
               secureTextEntry={!passwordVisible}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
               editable={!loading}
             />
             <TouchableOpacity
@@ -323,6 +363,9 @@ export const RegisterScreen = ({ navigation }) => {
               />
             </TouchableOpacity>
           </View>
+          {!!errors.password && (
+            <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.password}</Text>
+          )}
 
           <Text style={styles.passwordRule}>
             Mínimo 6 caracteres, una mayúscula
@@ -331,12 +374,15 @@ export const RegisterScreen = ({ navigation }) => {
           {/* Confirmar Contraseña */}
           <View style={styles.passwordContainer}>
             <TextInput
-              style={styles.passwordInput}
+              style={[styles.passwordInput, { color: colors.text }]}
               placeholder="Confirmar contraseña"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textSecondary}
               secureTextEntry={!confirmPasswordVisible}
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(v) => {
+                setConfirmPassword(v);
+                if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+              }}
               editable={!loading}
             />
             <TouchableOpacity
@@ -351,6 +397,9 @@ export const RegisterScreen = ({ navigation }) => {
               />
             </TouchableOpacity>
           </View>
+          {!!errors.confirmPassword && (
+            <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.confirmPassword}</Text>
+          )}
 
           {/* Botón Registrarse */}
           <TouchableOpacity
@@ -390,6 +439,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 20,
+  },
+  formErrorBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  formErrorText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  fieldErrorText: {
+    marginTop: 6,
+    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: '600',
   },
   logo: {
     width: 120,

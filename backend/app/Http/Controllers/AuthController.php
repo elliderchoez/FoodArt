@@ -58,10 +58,16 @@ class AuthController extends Controller
 
         $user = User::where('email', $validated['email'])->first();
 
-        if (!$user || !Hash::check($validated['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Credenciales inválidas'],
-            ]);
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no encontrado',
+            ], 404);
+        }
+
+        if (!Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'message' => 'Contraseña incorrecta',
+            ], 401);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -171,7 +177,7 @@ class AuthController extends Controller
             // Guardar en public/uploads para acceso directo
             $fileName = 'receta_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('uploads'), $fileName);
-            
+
             $fullUrl = url('/uploads/' . $fileName);
 
             return response()->json([
@@ -258,7 +264,7 @@ class AuthController extends Controller
     {
         try {
             $user = $request->user();
-            
+
             $notifications = \App\Models\Notification::where('user_id', $user->id)
                 ->with('fromUser')
                 ->orderBy('created_at', 'desc')
@@ -295,7 +301,7 @@ class AuthController extends Controller
     {
         try {
             $notification = \App\Models\Notification::findOrFail($id);
-            
+
             // Verificar que sea del usuario
             if ($notification->user_id !== $request->user()->id) {
                 return response()->json(['message' => 'No tienes permiso'], 403);
@@ -318,7 +324,7 @@ class AuthController extends Controller
     {
         try {
             $notification = \App\Models\Notification::findOrFail($id);
-            
+
             // Verificar que sea del usuario
             if ($notification->user_id !== $request->user()->id) {
                 return response()->json(['message' => 'No tienes permiso'], 403);

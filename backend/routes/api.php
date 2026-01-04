@@ -15,8 +15,8 @@ Route::post('/upload-image', [AuthController::class, 'uploadImage']);
 
 // Rutas públicas de recetas
 Route::get('/recetas', [RecetaController::class, 'index']);
-Route::get('/recetas/{id}', [RecetaController::class, 'show']);
 Route::get('/recetas/search', [RecetaController::class, 'search']);
+Route::get('/recetas/{id}', [RecetaController::class, 'show']);
 Route::get('/comentarios/{receta_id}', [ComentarioController::class, 'index']);
 
 // Rutas públicas de usuarios

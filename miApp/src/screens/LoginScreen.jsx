@@ -26,6 +26,8 @@ export const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,19 +35,25 @@ export const LoginScreen = ({ navigation }) => {
   };
 
   const validate = () => {
-    let ok = true;
+    const next = {};
+    const emailTrim = email.trim();
+    const passTrim = password;
 
-    if (!validateEmail(email)) {
-      Alert.alert('Error', 'Email inválido');
-      ok = false;
+    if (!emailTrim) {
+      next.email = 'El correo es obligatorio';
+    } else if (!validateEmail(emailTrim)) {
+      next.email = 'Email inválido';
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Mínimo 6 caracteres para la contraseña');
-      ok = false;
+    if (!passTrim) {
+      next.password = 'La contraseña es obligatoria';
+    } else if (passTrim.length < 6) {
+      next.password = 'Mínimo 6 caracteres';
     }
 
-    return ok;
+    setErrors(next);
+    setFormError('');
+    return Object.keys(next).length === 0;
   };
 
   const handleLogin = async () => {
@@ -111,12 +119,19 @@ export const LoginScreen = ({ navigation }) => {
         Alert.alert('Bienvenido', `¡Hola ${userName}!`);
         navigation.replace('Home');
       } else {
-        const errorMessage = data.message || 'Credenciales incorrectas';
-        Alert.alert('Error', errorMessage);
+        // Laravel puede responder {message} o {errors:{...}}
+        const serverMessage =
+          data?.message ||
+          (data?.errors
+            ? Object.values(data.errors).flat().filter(Boolean).join('\n')
+            : '') ||
+          'Credenciales incorrectas';
+
+        setFormError(serverMessage);
       }
     } catch (error) {
       console.error('Error en login:', error);
-      Alert.alert('Error', `No se pudo conectar con el servidor: ${error.message}`);
+      setFormError(`No se pudo conectar con el servidor: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -141,10 +156,16 @@ export const LoginScreen = ({ navigation }) => {
 
           {/* Tarjeta de login */}
           <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            {!!formError && (
+              <View style={[styles.formErrorBox, { borderColor: colors.error, backgroundColor: colors.surface }]}>
+                <Text style={[styles.formErrorText, { color: colors.error }]}>{formError}</Text>
+              </View>
+            )}
+
             {/* Email Input */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.text }]}>Correo electrónico</Text>
-              <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <View style={[styles.inputContainer, { borderColor: errors.email ? colors.error : colors.border, backgroundColor: colors.surface }]}>
                 <TextInput
                   style={[styles.input, { color: colors.text }]}
                   placeholder="Correo"
@@ -152,23 +173,32 @@ export const LoginScreen = ({ navigation }) => {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                  }}
                   editable={!loading}
                 />
               </View>
+              {!!errors.email && (
+                <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.email}</Text>
+              )}
             </View>
 
             {/* Password Input */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.text }]}>Contraseña</Text>
-              <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <View style={[styles.inputContainer, { borderColor: errors.password ? colors.error : colors.border, backgroundColor: colors.surface }]}>
                 <TextInput
                   style={[styles.input, { color: colors.text }]}
                   placeholder="••••••••"
                   placeholderTextColor={colors.textSecondary}
                   secureTextEntry={!passwordVisible}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                   editable={!loading}
                 />
                 <TouchableOpacity
@@ -182,6 +212,9 @@ export const LoginScreen = ({ navigation }) => {
                   />
                 </TouchableOpacity>
               </View>
+              {!!errors.password && (
+                <Text style={[styles.fieldErrorText, { color: colors.error }]}>{errors.password}</Text>
+              )}
             </View>
 
             {/* Forgot Password */}
@@ -356,5 +389,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
     textDecorationLine: 'underline',
+  },
+  formErrorBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  formErrorText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  fieldErrorText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
