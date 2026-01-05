@@ -44,25 +44,36 @@ const categorias = [
 ];
 
 // Componente de Categoría
-const CategoriaItem = ({ categoria, onPress, colors }) => (
-  <TouchableOpacity
-    style={[
-      styles.categoriaItem,
-      categoria.seleccionada && styles.categoriaSel,
-      { backgroundColor: categoria.seleccionada ? colors.primary : colors.surface, borderColor: colors.border }
-    ]}
-    onPress={onPress}
-  >
-    <Text style={styles.categoriaEmoji}>{categoria.emoji}</Text>
-    <Text style={[
-      styles.categoriaNombre,
-      categoria.seleccionada && styles.categoriaNombreSel,
-      { color: categoria.seleccionada ? '#FFFFFF' : colors.text }
-    ]}>
-      {categoria.nombre}
-    </Text>
-  </TouchableOpacity>
-);
+const CategoriaItem = ({ categoria, onPress, colors }) => {
+  const isSelected = !!categoria.seleccionada;
+  const bg = isSelected ? colors.primary : colors.surface;
+  const border = isSelected ? colors.primary : colors.border;
+
+  return (
+    <TouchableOpacity
+      style={[styles.categoriaItem, { backgroundColor: bg, borderColor: border }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <View
+        pointerEvents="none"
+        style={[styles.bookmarkCutout, { borderBottomColor: colors.background }]}
+      />
+
+      <Text style={styles.categoriaEmoji}>{categoria.emoji}</Text>
+      <Text
+        numberOfLines={2}
+        style={[
+          styles.categoriaNombre,
+          isSelected && styles.categoriaNombreSel,
+          { color: isSelected ? '#FFFFFF' : colors.text }
+        ]}
+      >
+        {categoria.nombre}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
 // Componente de Post/Receta
 const PostItem = ({ post, onPress, token, navigation, colors }) => {
@@ -188,10 +199,15 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
 export const HomeScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
   const { unreadCount } = useNotificationCount();
+  const PAGE_SIZE = 10;
   const [categoria, setCategoria] = useState('Todas');
   const [posts, setPosts] = useState([]);
   const [postsFiltrados, setPostsFiltrados] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [catList, setCatList] = useState(categorias);
   const [token, setToken] = useState(null);
 
@@ -233,15 +249,60 @@ export const HomeScreen = ({ navigation }) => {
     try {
       const tk = await AsyncStorage.getItem('authToken');
       setToken(tk);
-      cargarRecetas(tk);
+      cargarRecetas(tk, { page: 1, append: false });
     } catch (error) {
       console.error('Error obteniendo token:', error);
-      cargarRecetas(null);
+      setToken(null);
+      cargarRecetas(null, { page: 1, append: false });
     }
   };
 
-  const cargarRecetas = async (tk = null) => {
-    setLoading(true);
+  const aplicarFiltroCategoria = (items, categoriaNombre) => {
+    if (categoriaNombre === 'Todas') return items;
+
+    return items.filter(post => {
+      const titulo = (post.titulo || '').toLowerCase();
+
+      switch (categoriaNombre) {
+        case 'Pizza':
+          return titulo.includes('pizza');
+        case 'Mexicana':
+          return ['taco', 'burrito', 'quesadilla', 'enchilada'].some(word => titulo.includes(word));
+        case 'Postres':
+          return ['postre', 'pastel', 'chocolate', 'brownie', 'galleta', 'cheesecake'].some(word => titulo.includes(word));
+        case 'Saludable':
+          return ['bowl', 'ensalada', 'vegano', 'light', 'poke'].some(word => titulo.includes(word));
+        case 'Asiática':
+          return ['sushi', 'ramen', 'pad thai', 'wok'].some(word => titulo.includes(word));
+        case 'Hamburguesas':
+          return ['hamburguesa', 'burger'].some(word => titulo.includes(word));
+        case 'Pasta':
+          return ['pasta', 'espagueti', 'lasaña', 'carbonara', 'pesto'].some(word => titulo.includes(word));
+        case 'Ensaladas':
+          return ['ensalada', 'césar', 'salad'].some(word => titulo.includes(word));
+        default:
+          return true;
+      }
+    });
+  };
+
+  const cargarRecetas = async (tk = null, options = {}) => {
+    const pageToLoad = options.page ?? 1;
+    const append = options.append ?? false;
+    const isRefresh = options.refresh ?? false;
+
+    if (loading || loadingMore || refreshing) return;
+
+    if (append) {
+      setLoadingMore(true);
+    } else if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+      setHasMore(true);
+      setPage(1);
+    }
+
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -251,7 +312,7 @@ export const HomeScreen = ({ navigation }) => {
         headers['Authorization'] = `Bearer ${tk}`;
       }
 
-      const response = await fetch(`${API_URL}/recetas`, { headers });
+      const response = await fetch(`${API_URL}/recetas?page=${pageToLoad}&per_page=${PAGE_SIZE}`, { headers });
       
       if (!response.ok) {
         throw new Error('Error al cargar recetas');
@@ -260,7 +321,7 @@ export const HomeScreen = ({ navigation }) => {
       const data = await response.json();
       
       // Transformar datos de la API al formato esperado por el componente
-      const recetasFormateadas = data.data.map(receta => ({
+      const recetasFormateadas = (data.data || []).map(receta => ({
         id: receta.id,
         user_id: receta.user_id,
         titulo: receta.titulo,
@@ -276,14 +337,30 @@ export const HomeScreen = ({ navigation }) => {
         saved: receta.user_saved || false,
       }));
 
-      setPosts(recetasFormateadas);
-      setPostsFiltrados(recetasFormateadas);
-      console.log('Recetas cargadas:', recetasFormateadas);
+      const lastPage = data.last_page ?? pageToLoad;
+      const nextHasMore = pageToLoad < lastPage;
+      setHasMore(nextHasMore);
+      setPage(pageToLoad);
+
+      if (append) {
+        setPosts((prev) => {
+          const prevIds = new Set(prev.map((p) => p.id));
+          const nuevos = recetasFormateadas.filter((p) => !prevIds.has(p.id));
+          const merged = [...prev, ...nuevos];
+          setPostsFiltrados(aplicarFiltroCategoria(merged, categoria));
+          return merged;
+        });
+      } else {
+        setPosts(recetasFormateadas);
+        setPostsFiltrados(aplicarFiltroCategoria(recetasFormateadas, categoria));
+      }
     } catch (error) {
       console.error('Error cargando recetas:', error);
       Alert.alert('Error', 'No se pudieron cargar las recetas');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
     }
   };
 
@@ -296,35 +373,16 @@ export const HomeScreen = ({ navigation }) => {
     }));
     setCatList(nuevasCategorias);
 
-    if (categoriaNombre === 'Todas') {
-      setPostsFiltrados(posts);
-    } else {
-      const filtrados = posts.filter(post => {
-        const titulo = post.titulo.toLowerCase();
-        
-        switch (categoriaNombre) {
-          case 'Pizza':
-            return titulo.includes('pizza');
-          case 'Mexicana':
-            return ['taco', 'burrito', 'quesadilla', 'enchilada'].some(word => titulo.includes(word));
-          case 'Postres':
-            return ['postre', 'pastel', 'chocolate', 'brownie', 'galleta', 'cheesecake'].some(word => titulo.includes(word));
-          case 'Saludable':
-            return ['bowl', 'ensalada', 'vegano', 'light', 'poke'].some(word => titulo.includes(word));
-          case 'Asiática':
-            return ['sushi', 'ramen', 'pad thai', 'wok'].some(word => titulo.includes(word));
-          case 'Hamburguesas':
-            return ['hamburguesa', 'burger'].some(word => titulo.includes(word));
-          case 'Pasta':
-            return ['pasta', 'espagueti', 'lasaña', 'carbonara', 'pesto'].some(word => titulo.includes(word));
-          case 'Ensaladas':
-            return ['ensalada', 'césar', 'salad'].some(word => titulo.includes(word));
-          default:
-            return true;
-        }
-      });
-      setPostsFiltrados(filtrados);
-    }
+    setPostsFiltrados(aplicarFiltroCategoria(posts, categoriaNombre));
+  };
+
+  const cargarMas = () => {
+    if (loading || loadingMore || !hasMore) return;
+    cargarRecetas(token, { page: page + 1, append: true });
+  };
+
+  const refrescar = () => {
+    cargarRecetas(token, { page: 1, append: false, refresh: true });
   };
 
   const irA = (pantalla) => {
@@ -351,8 +409,11 @@ export const HomeScreen = ({ navigation }) => {
             onPress={() => seleccionarCategoria(item.nombre)}
           />
         )}
+        style={styles.categoriasList}
         contentContainerStyle={styles.categoriasContainer}
       />
+
+      <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
 
       {/* Feed */}
       {loading ? (
@@ -362,8 +423,8 @@ export const HomeScreen = ({ navigation }) => {
       ) : postsFiltrados.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
-          <Text style={styles.emptyText}>No hay recetas aún</Text>
-          <Text style={styles.emptySubtext}>Las recetas aparecerán aquí</Text>
+          <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas aún</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Las recetas aparecerán aquí</Text>
         </View>
       ) : (
         <FlatList
@@ -378,8 +439,26 @@ export const HomeScreen = ({ navigation }) => {
               onPress={() => navigation.navigate('DetalleReceta', { receta: item })}
             />
           )}
+          style={styles.feedList}
           contentContainerStyle={styles.feedContainer}
           showsVerticalScrollIndicator={false}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.5}
+          refreshing={refreshing}
+          onRefresh={refrescar}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : !hasMore && posts.length > 0 ? (
+              <View style={{ paddingVertical: 18 }}>
+                <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '600' }}>
+                  Ya no hay más recetas
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
 
@@ -428,33 +507,63 @@ const styles = StyleSheet.create({
   },
   categoriasContainer: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingTop: 8,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  categoriasList: {
+    maxHeight: 96,
+    flexGrow: 0,
+    flexShrink: 0,
+    marginBottom: 2,
+  },
+  sectionDivider: {
+    height: 1,
+    width: '100%',
+  },
+  feedList: {
+    flex: 1,
   },
   categoriaItem: {
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 70,
-    height: 70,
-    marginHorizontal: 4,
+    justifyContent: 'flex-start',
+    width: 58,
+    height: 72,
+    marginRight: 8,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#F3F4F6',
+    paddingTop: 6,
+    paddingBottom: 6,
   },
-  categoriaSel: {
-    backgroundColor: '#D4AF37',
-    borderColor: '#D4AF37',
+  bookmarkCutout: {
+    position: 'absolute',
+    bottom: -1,
+    left: '50%',
+    transform: [{ translateX: -10 }],
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
   },
   categoriaEmoji: {
-    fontSize: 28,
+    fontSize: 21,
     marginBottom: 2,
   },
   categoriaNombre: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 12,
+    includeFontPadding: false,
+    minHeight: 24,
+    paddingHorizontal: 2,
+    paddingBottom: 1,
   },
   categoriaNombreSel: {
     color: '#FFFFFF',

@@ -18,9 +18,12 @@ class RecetaController extends Controller
     public function index(Request $request)
     {
         try {
+            $perPage = (int) $request->query('per_page', 10);
+            $perPage = max(1, min($perPage, 50));
+
             $recetas = Receta::with(['user'])
                 ->latest()
-                ->paginate(15);
+                ->paginate($perPage);
 
             // Obtener el usuario si está autenticado
             $user = null;
@@ -395,9 +398,21 @@ class RecetaController extends Controller
 
             $recetas = Receta::query();
 
+            $driver = $recetas->getConnection()->getDriverName();
+
             if ($query) {
-                $recetas->where('titulo', 'ILIKE', "%$query%")
-                    ->orWhere('descripcion', 'ILIKE', "%$query%");
+                $q = mb_strtolower($query);
+                $recetas->where(function ($sub) use ($q, $driver) {
+                    // PostgreSQL soporta ILIKE, pero lo mantenemos compatible
+                    if ($driver === 'pgsql') {
+                        $sub->where('titulo', 'ILIKE', "%{$q}%")
+                            ->orWhere('descripcion', 'ILIKE', "%{$q}%");
+                        return;
+                    }
+
+                    $sub->whereRaw('LOWER(titulo) LIKE ?', ["%{$q}%"])
+                        ->orWhereRaw('LOWER(descripcion) LIKE ?', ["%{$q}%"]);
+                });
             }
 
             if ($dificultad && $dificultad !== 'Cualquiera') {
@@ -405,8 +420,15 @@ class RecetaController extends Controller
             }
 
             if ($tiempo_max) {
-                // Parsear tiempo_preparacion (ej: "45 min") y filtrar
-                $recetas->whereRaw("CAST(SPLIT_PART(tiempo_preparacion, ' ', 1) AS INTEGER) <= ?", [$tiempo_max]);
+                // Guardamos tiempo_preparacion como string; tratamos de castearlo a número según motor.
+                if ($driver === 'mysql') {
+                    $recetas->whereRaw('CAST(tiempo_preparacion AS UNSIGNED) <= ?', [$tiempo_max]);
+                } elseif ($driver === 'pgsql') {
+                    $recetas->whereRaw('CAST(tiempo_preparacion AS INTEGER) <= ?', [$tiempo_max]);
+                } else {
+                    // Fallback (sqlite/otros): intenta comparar como texto numérico simple
+                    $recetas->where('tiempo_preparacion', '<=', (string) $tiempo_max);
+                }
             }
 
             if ($orden === 'popular') {

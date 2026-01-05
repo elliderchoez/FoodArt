@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -21,10 +21,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
-// Componente de Post/Receta (igual al HomeScreen)
-const PostItem = ({ post, navigation }) => (
+// Componente de Post/Receta (similar al HomeScreen)
+const PostItem = ({ post, navigation, colors }) => (
   <TouchableOpacity
-    style={styles.postCard}
+    style={[styles.postCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
     onPress={() => navigation?.navigate('DetalleReceta', { receta: post })}
   >
     <View style={styles.postHeader}>
@@ -37,20 +37,20 @@ const PostItem = ({ post, navigation }) => (
         <TouchableOpacity
           onPress={() => navigation?.navigate('UsuarioPerfil', { usuarioId: post.user_id })}
         >
-          <Text style={styles.userName}>{post.usuarioNombre}</Text>
+          <Text style={[styles.userName, { color: colors.text }]}>{post.usuarioNombre}</Text>
         </TouchableOpacity>
       </View>
     </View>
-    <Text style={styles.postTitle}>{post.titulo}</Text>
-    <Text style={styles.postDescription}>{post.descripcion}</Text>
+    <Text style={[styles.postTitle, { color: colors.text }]}>{post.titulo}</Text>
+    <Text style={[styles.postDescription, { color: colors.textSecondary }]}>{post.descripcion}</Text>
     <View style={styles.recipeInfo}>
       <View style={styles.infoItem}>
-        <Icon name="clock-outline" size={14} color="#D4AF37" />
-        <Text style={styles.infoText}>{post.tiempoPreparacion}</Text>
+        <Icon name="clock-outline" size={14} color={colors.primary} />
+        <Text style={[styles.infoText, { color: colors.textSecondary }]}>{post.tiempoPreparacion}</Text>
       </View>
       <View style={styles.infoItem}>
-        <Icon name="chart-line" size={14} color="#D4AF37" />
-        <Text style={styles.infoText}>{post.dificultad}</Text>
+        <Icon name="chart-line" size={14} color={colors.primary} />
+        <Text style={[styles.infoText, { color: colors.textSecondary }]}>{post.dificultad}</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -63,6 +63,48 @@ export const BuscarScreen = ({ navigation }) => {
   const [recetasFiltradas, setRecetasFiltradas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showFiltroModal, setShowFiltroModal] = useState(false);
+  const [token, setToken] = useState(null);
+
+  const normalizeText = useCallback((value) => {
+    if (!value) return '';
+    return String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }, []);
+
+  const stemWord = useCallback((word) => {
+    const w = normalizeText(word);
+    if (!w) return '';
+
+    // Stemming muy simple para español (plural):
+    // - tacos -> taco
+    // - postres -> postre
+    // - tomates -> tomate
+    if (w.length <= 3) return w;
+    if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+    if (w.endsWith('s') && w.length > 3) return w.slice(0, -1);
+    return w;
+  }, [normalizeText]);
+
+  const tokenize = useCallback((value) => {
+    const n = normalizeText(value);
+    if (!n) return [];
+    return n.split(/[^a-z0-9]+/g).filter(Boolean);
+  }, [normalizeText]);
+
+  const buildSearchIndex = useCallback((receta) => {
+    const ingredientes = Array.isArray(receta?.ingredientes) ? receta.ingredientes : [];
+    const base = [receta?.titulo, receta?.descripcion, ...ingredientes].filter(Boolean).join(' ');
+    const tokens = tokenize(base).map(stemWord);
+    return ` ${tokens.join(' ')} `;
+  }, [stemWord, tokenize]);
+
+  const normalizeQueryForServer = useCallback((value) => {
+    const tokens = tokenize(value).map(stemWord);
+    return tokens.join(' ');
+  }, [stemWord, tokenize]);
 
   // Estado de filtros
   const [ordenamiento, setOrdenamiento] = useState('Fecha de publicación');
@@ -71,77 +113,200 @@ export const BuscarScreen = ({ navigation }) => {
   const [tiempoMax, setTiempoMax] = useState(null);
   const [dificultad, setDificultad] = useState('Cualquiera');
 
+  const obtenerToken = useCallback(async () => {
+    try {
+      const tk = await AsyncStorage.getItem('authToken');
+      setToken(tk);
+      return tk;
+    } catch (e) {
+      setToken(null);
+      return null;
+    }
+  }, []);
+
+  const mapRecetaApiToPost = useCallback((receta) => {
+    const tiempo = receta?.tiempo_preparacion;
+    const tiempoPreparacion = tiempo ? `${tiempo} min` : '—';
+
+    return {
+      id: receta.id,
+      user_id: receta.user_id,
+      titulo: receta.titulo,
+      descripcion: receta.descripcion,
+      imagen: receta.imagen_url,
+      usuarioNombre: receta.user?.name || 'Usuario',
+      usuarioImagen: receta.user?.imagen_perfil || 'https://via.placeholder.com/40',
+      tiempoPreparacion,
+      dificultad: receta.dificultad,
+      ingredientes: Array.isArray(receta.ingredientes) ? receta.ingredientes : [],
+      fechaCreacion: receta.created_at ? new Date(receta.created_at).getTime() : 0,
+      likes: receta.likes_count || 0,
+      comentarios: receta.comentarios_count || 0,
+      liked: receta.user_liked || false,
+      saved: receta.user_saved || false,
+    };
+  }, []);
+
+  const cargarRecetasDesdeApi = useCallback(async (tk, params) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (tk) headers['Authorization'] = `Bearer ${tk}`;
+
+    const query = new URLSearchParams(params);
+    const url = `${API_URL}/recetas/search?${query.toString()}`;
+
+    const response = await fetch(url, { headers });
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message = data?.message || 'No se pudieron cargar las recetas';
+      throw new Error(message);
+    }
+
+    const list = Array.isArray(data?.data) ? data.data : [];
+    return list.map(mapRecetaApiToPost);
+  }, [mapRecetaApiToPost]);
+
+  const cargarFeedRecetas = useCallback(async (tk) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (tk) headers['Authorization'] = `Bearer ${tk}`;
+
+    const response = await fetch(`${API_URL}/recetas`, { headers });
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message = data?.message || 'No se pudieron cargar las recetas';
+      throw new Error(message);
+    }
+
+    const list = Array.isArray(data?.data) ? data.data : [];
+    return list.map(mapRecetaApiToPost);
+  }, [mapRecetaApiToPost]);
+
   useFocusEffect(
     useCallback(() => {
-      cargarRecetas();
-      return () => {};
-    }, [])
-  );
+      let mounted = true;
+      (async () => {
+        setLoading(true);
+        try {
+          const tk = await obtenerToken();
+          const posts = await cargarFeedRecetas(tk);
+          if (!mounted) return;
+          setAllRecetas(posts);
+          setRecetasFiltradas(posts);
+        } catch (error) {
+          console.error('Error cargando recetas:', error);
+          Alert.alert('Error', error?.message || 'No se pudieron cargar las recetas');
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      })();
 
-  const cargarRecetas = async () => {
-    setLoading(true);
-    try {
-      // Las recetas se cargarán desde la base de datos más adelante
-      setAllRecetas([]);
-      setRecetasFiltradas([]);
-    } catch (error) {
-      console.error('Error cargando recetas:', error);
-      Alert.alert('Error', 'No se pudieron cargar las recetas');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return () => {
+        mounted = false;
+      };
+    }, [obtenerToken, cargarFeedRecetas])
+  );
 
   const filtrarRecetas = (query) => {
     setBusqueda(query);
-    aplicarFiltros(query);
   };
 
-  const aplicarFiltros = (query = busqueda) => {
-    let resultado = allRecetas;
+  const serverOrden = useMemo(() => {
+    // Back: recent | popular
+    return ordenamiento === 'Fecha de publicación' ? 'recent' : 'recent';
+  }, [ordenamiento]);
 
-    // Filtro por texto
-    if (query.trim()) {
-      resultado = resultado.filter(receta =>
-        receta.titulo.toLowerCase().includes(query.toLowerCase()) ||
-        receta.descripcion.toLowerCase().includes(query.toLowerCase()) ||
-        receta.ingredientes.some(ing => ing.toLowerCase().includes(query.toLowerCase()))
-      );
+  useEffect(() => {
+    // Debounce para no spamear el backend mientras escribe
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const tk = token ?? (await AsyncStorage.getItem('authToken'));
+
+        let base = [];
+
+        const hasServerSearch = busqueda.trim().length > 0 || (dificultad && dificultad !== 'Cualquiera') || !!tiempoMax;
+
+        if (hasServerSearch) {
+          base = await cargarRecetasDesdeApi(tk, {
+            q: normalizeQueryForServer(busqueda.trim()),
+            dificultad: dificultad,
+            tiempo_max: tiempoMax ?? '',
+            orden: serverOrden,
+          });
+        } else {
+          base = await cargarFeedRecetas(tk);
+        }
+
+        setAllRecetas(base);
+        // luego aplicamos filtros locales (incluye/excluye + orden por título)
+        aplicarFiltros(busqueda, base);
+      } catch (e) {
+        console.error('Error en búsqueda:', e);
+        Alert.alert('Error', e?.message || 'No se pudo buscar');
+        setAllRecetas([]);
+        setRecetasFiltradas([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, incluye, excluye, tiempoMax, dificultad, ordenamiento]);
+
+  const aplicarFiltros = (query = busqueda, source = allRecetas) => {
+    let resultado = Array.isArray(source) ? [...source] : [];
+
+    const queryTokens = tokenize(query).map(stemWord);
+
+    // Filtro por texto (local extra: ingredientes)
+    if (queryTokens.length) {
+      resultado = resultado.filter((receta) => {
+        const index = buildSearchIndex(receta);
+        return queryTokens.every((t) => t && index.includes(` ${t} `));
+      });
     }
 
     // Filtro ingredientes a incluir
     if (incluye.trim()) {
-      const ingredientesIncluir = incluye.split(',').map(ing => ing.trim().toLowerCase());
-      resultado = resultado.filter(receta =>
-        ingredientesIncluir.every(inc =>
-          receta.ingredientes.some(ing => ing.toLowerCase().includes(inc))
-        )
-      );
+      const ingredientesIncluir = incluye
+        .split(',')
+        .map((ing) => stemWord(ing))
+        .filter(Boolean);
+      resultado = resultado.filter(receta => {
+        const ingredientes = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
+        const idx = ` ${ingredientes.flatMap((i) => tokenize(i).map(stemWord)).join(' ')} `;
+        return ingredientesIncluir.every((inc) => idx.includes(` ${inc} `));
+      });
     }
 
     // Filtro ingredientes a excluir
     if (excluye.trim()) {
-      const ingredientesExcluir = excluye.split(',').map(ing => ing.trim().toLowerCase());
-      resultado = resultado.filter(receta =>
-        ingredientesExcluir.every(exc =>
-          !receta.ingredientes.some(ing => ing.toLowerCase().includes(exc))
-        )
-      );
+      const ingredientesExcluir = excluye
+        .split(',')
+        .map((ing) => stemWord(ing))
+        .filter(Boolean);
+      resultado = resultado.filter(receta => {
+        const ingredientes = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
+        const idx = ` ${ingredientes.flatMap((i) => tokenize(i).map(stemWord)).join(' ')} `;
+        return ingredientesExcluir.every((exc) => !idx.includes(` ${exc} `));
+      });
     }
 
     // Filtro tiempo de preparación
     if (tiempoMax) {
       resultado = resultado.filter(receta => {
-        const minutos = parseInt(receta.tiempoPreparacion);
+        const minutos = parseInt(receta.tiempoPreparacion || '', 10);
+        if (Number.isNaN(minutos)) return true;
         return minutos <= tiempoMax;
       });
     }
 
     // Filtro dificultad
     if (dificultad !== 'Cualquiera') {
-      resultado = resultado.filter(receta =>
-        receta.dificultad.toLowerCase().includes(dificultad.toLowerCase())
-      );
+      const diff = stemWord(dificultad);
+      resultado = resultado.filter((receta) => stemWord(receta.dificultad).includes(diff));
     }
 
     // Ordenamiento
@@ -192,6 +357,8 @@ export const BuscarScreen = ({ navigation }) => {
             placeholderTextColor={colors.textSecondary}
             value={busqueda}
             onChangeText={filtrarRecetas}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           {busqueda.length > 0 && (
             <TouchableOpacity onPress={limpiarBusqueda}>
@@ -219,7 +386,7 @@ export const BuscarScreen = ({ navigation }) => {
         <FlatList
           data={recetasFiltradas}
           keyExtractor={item => item.id.toString()}
-          renderItem={({ item }) => <PostItem post={item} navigation={navigation} />}
+          renderItem={({ item }) => <PostItem post={item} navigation={navigation} colors={colors} />}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
