@@ -58,6 +58,11 @@ export const PerfilScreen = ({ navigation }) => {
   const [recetasGuardadas, setRecetasGuardadas] = useState([]);
   const [recetasConLike, setRecetasConLike] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [loadingMisRecetas, setLoadingMisRecetas] = useState(false);
+  const [loadingGuardadas, setLoadingGuardadas] = useState(false);
+  const [loadingConLike, setLoadingConLike] = useState(false);
+  const [profileImageLoading, setProfileImageLoading] = useState(false);
   const [tabActiva, setTabActiva] = useState(0);
   const [editingDescription, setEditingDescription] = useState(false);
   const [newDescription, setNewDescription] = useState('');
@@ -68,22 +73,31 @@ export const PerfilScreen = ({ navigation }) => {
   const [tipoLista, setTipoLista] = useState('seguidores');
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [loadingLista, setLoadingLista] = useState(false);
+  const [mostrarMenuPerfil, setMostrarMenuPerfil] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      cargarPerfilUsuario();
-      return () => {};
+      let cancelled = false;
+      cargarPerfilUsuario(() => cancelled);
+      return () => {
+        cancelled = true;
+      };
     }, [])
   );
 
-  const cargarPerfilUsuario = async () => {
+  const cargarPerfilUsuario = async (isCancelled = () => false) => {
     setLoading(true);
+    setLoadingStats(true);
+    setLoadingMisRecetas(true);
+    setLoadingGuardadas(true);
+    setLoadingConLike(true);
     try {
       const tk = await AsyncStorage.getItem('authToken');
-      setToken(tk);
+      if (!isCancelled()) setToken(tk);
       
       if (!tk) {
         Alert.alert('Error', 'No autenticado');
+        if (!isCancelled()) setLoading(false);
         return;
       }
 
@@ -98,67 +112,101 @@ export const PerfilScreen = ({ navigation }) => {
 
       if (respuestaUsuario.ok) {
         const datosUsuario = await respuestaUsuario.json();
-        setUsuario(datosUsuario);
-        setNewDescription(datosUsuario.descripcion || '');
-
-        // Obtener seguidores
-        const respuestaSeguidores = await fetch(`${API_URL}/usuarios/${datosUsuario.id}/seguidores`);
-        if (respuestaSeguidores.ok) {
-          const datosSeguidores = await respuestaSeguidores.json();
-          setSeguidores(datosSeguidores.total || 0);
+        if (!isCancelled()) {
+          setUsuario(datosUsuario);
+          setNewDescription(datosUsuario.descripcion || '');
+          // dejamos de bloquear el render aquí
+          setLoading(false);
         }
 
-        // Obtener seguidos
-        const respuestaSeguidos = await fetch(`${API_URL}/usuarios/${datosUsuario.id}/siguiendo`);
-        if (respuestaSeguidos.ok) {
-          const datosSeguidos = await respuestaSeguidos.json();
-          setSeguidos(datosSeguidos.total || 0);
-        }
+        // Cargar stats y listas en paralelo (sin bloquear pantalla)
+        const userId = datosUsuario.id;
 
-        // Obtener recetas del usuario
-        const respuestaRecetas = await fetch(`${API_URL}/user/recetas`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${tk}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        (async () => {
+          try {
+            const [resSeguidores, resSeguidos] = await Promise.allSettled([
+              fetch(`${API_URL}/usuarios/${userId}/seguidores`),
+              fetch(`${API_URL}/usuarios/${userId}/siguiendo`),
+            ]);
 
-        if (respuestaRecetas.ok) {
-          const datosRecetas = await respuestaRecetas.json();
-          console.log('Recetas cargadas:', datosRecetas);
-          setRecetas(datosRecetas.data || datosRecetas || []);
-        }
+            if (resSeguidores.status === 'fulfilled' && resSeguidores.value.ok) {
+              const datos = await resSeguidores.value.json();
+              if (!isCancelled()) setSeguidores(datos.total || 0);
+            }
 
-        // Obtener recetas guardadas
-        const respuestaGuardadas = await fetch(`${API_URL}/user/recetas-guardadas`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${tk}`,
-            'Content-Type': 'application/json',
-          },
-        });
+            if (resSeguidos.status === 'fulfilled' && resSeguidos.value.ok) {
+              const datos = await resSeguidos.value.json();
+              if (!isCancelled()) setSeguidos(datos.total || 0);
+            }
+          } catch (e) {
+            // silencioso: no bloquea el perfil
+          } finally {
+            if (!isCancelled()) setLoadingStats(false);
+          }
+        })();
 
-        if (respuestaGuardadas.ok) {
-          const datosGuardadas = await respuestaGuardadas.json();
-          console.log('Recetas guardadas:', datosGuardadas);
-          setRecetasGuardadas(datosGuardadas.data || datosGuardadas || []);
-        }
+        (async () => {
+          try {
+            const respuestaRecetas = await fetch(`${API_URL}/user/recetas`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${tk}`,
+                'Content-Type': 'application/json',
+              },
+            });
 
-        // Obtener recetas con like
-        const respuestaConLike = await fetch(`${API_URL}/user/recetas-con-like`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${tk}`,
-            'Content-Type': 'application/json',
-          },
-        });
+            if (respuestaRecetas.ok) {
+              const datosRecetas = await respuestaRecetas.json();
+              if (!isCancelled()) setRecetas(datosRecetas.data || datosRecetas || []);
+            }
+          } catch (e) {
+            // silencioso
+          } finally {
+            if (!isCancelled()) setLoadingMisRecetas(false);
+          }
+        })();
 
-        if (respuestaConLike.ok) {
-          const datosConLike = await respuestaConLike.json();
-          console.log('Recetas con like:', datosConLike);
-          setRecetasConLike(datosConLike.data || datosConLike || []);
-        }
+        (async () => {
+          try {
+            const respuesta = await fetch(`${API_URL}/user/recetas-guardadas`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${tk}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (respuesta.ok) {
+              const datos = await respuesta.json();
+              if (!isCancelled()) setRecetasGuardadas(datos.data || datos || []);
+            }
+          } catch (e) {
+            // silencioso
+          } finally {
+            if (!isCancelled()) setLoadingGuardadas(false);
+          }
+        })();
+
+        (async () => {
+          try {
+            const respuesta = await fetch(`${API_URL}/user/recetas-con-like`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${tk}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (respuesta.ok) {
+              const datos = await respuesta.json();
+              if (!isCancelled()) setRecetasConLike(datos.data || datos || []);
+            }
+          } catch (e) {
+            // silencioso
+          } finally {
+            if (!isCancelled()) setLoadingConLike(false);
+          }
+        })();
       } else {
         Alert.alert('Error', 'No se pudieron cargar los datos del perfil');
       }
@@ -166,7 +214,7 @@ export const PerfilScreen = ({ navigation }) => {
       console.error('Error cargando perfil:', error);
       Alert.alert('Error', 'Error al cargar el perfil');
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
   };
 
@@ -315,6 +363,7 @@ export const PerfilScreen = ({ navigation }) => {
 
   const recetasActuales = mostrarRecetas();
   const mensajeVacio = obtenerMensajeVacio();
+  const loadingTab = tabActiva === 0 ? loadingMisRecetas : tabActiva === 1 ? loadingGuardadas : loadingConLike;
 
   // Estilos dinámicos basados en tema
   const dynamicStyles = {
@@ -346,16 +395,38 @@ export const PerfilScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
       >
+        {/* Top bar */}
+        <View style={[styles.topBar, { borderBottomColor: colors.border }]}
+        >
+          <Text style={[styles.topBarTitle, { color: colors.text }]}>Perfil</Text>
+          <TouchableOpacity
+            style={[styles.topBarButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+            onPress={() => setMostrarMenuPerfil(true)}
+          >
+            <Icon name="dots-vertical" size={22} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
         {/* Header con foto y stats */}
         <View style={[styles.headerSection, dynamicStyles.headerSection]}>
           <View style={styles.profileHeaderRow}>
             {/* Foto de perfil */}
             <View style={styles.profileImageContainer}>
               {usuario.imagen_perfil ? (
-                <Image
-                  source={{ uri: usuario.imagen_perfil }}
-                  style={styles.profileImage}
-                />
+                <View style={styles.profileImageWrapper}>
+                  <Image
+                    source={{ uri: usuario.imagen_perfil }}
+                    style={styles.profileImage}
+                    onLoadStart={() => setProfileImageLoading(true)}
+                    onLoadEnd={() => setProfileImageLoading(false)}
+                    onError={() => setProfileImageLoading(false)}
+                  />
+                  {profileImageLoading && (
+                    <View style={[styles.profileImageLoadingOverlay, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )}
+                </View>
               ) : (
                 <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
                   <Icon name="account-circle" size={90} color="#D1D5DB" />
@@ -376,7 +447,7 @@ export const PerfilScreen = ({ navigation }) => {
                 style={styles.statItem}
                 onPress={() => cargarListaSeguidores('seguidores')}
               >
-                <Text style={[styles.statNumber, dynamicStyles.statNumber]}>{seguidores}</Text>
+                <Text style={[styles.statNumber, dynamicStyles.statNumber]}>{loadingStats ? '—' : seguidores}</Text>
                 <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Seguidores</Text>
               </TouchableOpacity>
 
@@ -385,7 +456,7 @@ export const PerfilScreen = ({ navigation }) => {
                 style={styles.statItem}
                 onPress={() => cargarListaSeguidores('siguiendo')}
               >
-                <Text style={[styles.statNumber, dynamicStyles.statNumber]}>{seguidos}</Text>
+                <Text style={[styles.statNumber, dynamicStyles.statNumber]}>{loadingStats ? '—' : seguidos}</Text>
                 <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Seguidos</Text>
               </TouchableOpacity>
             </View>
@@ -439,43 +510,6 @@ export const PerfilScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Selector de tema */}
-        <View style={[styles.themeToggleContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-          <View style={styles.themeToggleContent}>
-            <View style={styles.themeToggleLeft}>
-              <Icon name={isDarkMode ? "moon-waning-crescent" : "white-balance-sunny"} size={24} color={colors.primary} />
-              <Text style={[styles.themeToggleLabel, { color: colors.text }]}>
-                {isDarkMode ? 'Tema oscuro' : 'Tema claro'}
-              </Text>
-            </View>
-            <Switch
-              value={isDarkMode}
-              onValueChange={toggleTheme}
-              trackColor={{ false: '#E5E7EB', true: '#D4AF37' }}
-              thumbColor={isDarkMode ? '#D4AF37' : '#FFFFFF'}
-            />
-          </View>
-        </View>
-
-        {/* Botones de acción */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.btnEditarPerfil}
-            onPress={() => navigation.navigate('EditarPerfil', { usuario })}
-          >
-            <Icon name="pencil" size={18} color="#FFFFFF" />
-            <Text style={styles.btnEditarPerfilText}>Editar perfil</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.btnCerrarSesion}
-            onPress={cerrarSesion}
-          >
-            <Icon name="logout" size={18} color="#FFFFFF" />
-            <Text style={styles.btnCerrarSesionText}>Cerrar sesión</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Línea divisora */}
         <View style={[styles.divider, dynamicStyles.divider]} />
 
@@ -503,7 +537,11 @@ export const PerfilScreen = ({ navigation }) => {
         </View>
 
         {/* Grid de recetas o mensaje vacío */}
-        {recetasActuales.length === 0 ? (
+        {loadingTab ? (
+          <View style={styles.loadingTabContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : recetasActuales.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name={mensajeVacio.icono} size={64} color={colors.primary} />
             <Text style={[styles.emptyTitle, dynamicStyles.emptyTitle]}>{mensajeVacio.titulo}</Text>
@@ -538,6 +576,74 @@ export const PerfilScreen = ({ navigation }) => {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Menú desplegable de perfil */}
+      <Modal
+        visible={mostrarMenuPerfil}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMostrarMenuPerfil(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setMostrarMenuPerfil(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={[styles.menuSheet, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+          >
+            <Text style={[styles.menuTitle, { color: colors.text }]}>Opciones</Text>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMostrarMenuPerfil(false);
+                navigation.navigate('EditarPerfil', { usuario });
+              }}
+            >
+              <Icon name="account-edit-outline" size={22} color={colors.primary} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Editar perfil</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+
+            <View style={styles.menuItem}>
+              <Icon
+                name={isDarkMode ? 'moon-waning-crescent' : 'white-balance-sunny'}
+                size={22}
+                color={colors.primary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.menuItemText, { color: colors.text }]}>Temas</Text>
+                <Text style={[styles.menuItemSubtext, { color: colors.textSecondary }]}>
+                  {isDarkMode ? 'Tema oscuro' : 'Tema claro'}
+                </Text>
+              </View>
+              <Switch
+                value={isDarkMode}
+                onValueChange={toggleTheme}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={isDarkMode ? colors.primary : '#FFFFFF'}
+              />
+            </View>
+
+            <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMostrarMenuPerfil(false);
+                cerrarSesion();
+              }}
+            >
+              <Icon name="logout" size={22} color={colors.primary} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Cerrar sesión</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Modal para Seguidores/Siguiendo */}
       <Modal visible={mostrarListaSeguidores} animationType="slide">
@@ -619,8 +725,67 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  topBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  topBarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  topBarButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-start',
+    paddingTop: 70,
+    paddingHorizontal: 16,
+  },
+  menuSheet: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  menuTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  menuItemText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  menuItemSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  menuDivider: {
+    height: 1,
+  },
   loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingTabContainer: {
+    paddingVertical: 30,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -642,12 +807,28 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
   },
+  profileImageWrapper: {
+    width: 90,
+    height: 90,
+    position: 'relative',
+  },
   profileImage: {
     width: 90,
     height: 90,
     borderRadius: 45,
     borderWidth: 2,
     borderColor: '#E5E7EB',
+  },
+  profileImageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 45,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   profileImagePlaceholder: {
     backgroundColor: '#F3F4F6',

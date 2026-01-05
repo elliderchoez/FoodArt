@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
+  ScrollView,
   Text,
   TouchableOpacity,
   FlatList,
@@ -17,14 +18,19 @@ import { API_URL } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 // Componente para mostrar un usuario en lista
-const UsuarioListItem = ({ usuario, navigation, onPress }) => (
-  <TouchableOpacity style={styles.usuarioListItem} onPress={onPress}>
+const UsuarioListItem = ({ usuario, onPress, colors }) => (
+  <TouchableOpacity
+    style={[styles.usuarioListItem, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+    onPress={onPress}
+  >
     <Image source={{ uri: usuario.imagen_perfil }} style={styles.listAvatar} />
     <View style={styles.listInfo}>
-      <Text style={styles.listName}>{usuario.name}</Text>
-      <Text style={styles.listDescription}>{usuario.descripcion || 'Sin descripción'}</Text>
+      <Text style={[styles.listName, { color: colors.text }]}>{usuario.name}</Text>
+      <Text style={[styles.listDescription, { color: colors.textSecondary }]}>
+        {usuario.descripcion || 'Sin descripción'}
+      </Text>
     </View>
-    <Icon name="chevron-right" size={24} color="#D4AF37" />
+    <Icon name="chevron-right" size={24} color={colors.primary} />
   </TouchableOpacity>
 );
 
@@ -42,6 +48,7 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
   const [tipoLista, setTipoLista] = useState('seguidores');
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [loadingLista, setLoadingLista] = useState(false);
+  const [profileImageLoading, setProfileImageLoading] = useState(false);
 
   useEffect(() => {
     const inicializar = async () => {
@@ -192,20 +199,20 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
 
   const RecetaCard = ({ receta }) => (
     <TouchableOpacity
-      style={styles.recetaCard}
+      style={[styles.recetaCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
       onPress={() => navigation.navigate('DetalleReceta', { receta })}
     >
       <Image source={{ uri: receta.imagen_url }} style={styles.recetaImage} />
       <View style={styles.recetaInfo}>
-        <Text style={styles.recetaTitulo} numberOfLines={1}>{receta.titulo}</Text>
+        <Text style={[styles.recetaTitulo, { color: colors.text }]} numberOfLines={1}>{receta.titulo}</Text>
         <View style={styles.recetaMeta}>
           <View style={styles.metaItem}>
             <Icon name="heart" size={14} color="#FF4757" />
-            <Text style={styles.metaText}>{receta.likes_count || 0}</Text>
+            <Text style={[styles.metaText, { color: colors.textSecondary }]}>{receta.likes_count || 0}</Text>
           </View>
           <View style={styles.metaItem}>
             <Icon name="comment" size={14} color="#6B7280" />
-            <Text style={styles.metaText}>{receta.comentarios_count || 0}</Text>
+            <Text style={[styles.metaText, { color: colors.textSecondary }]}>{receta.comentarios_count || 0}</Text>
           </View>
         </View>
       </View>
@@ -216,8 +223,8 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
     if (tab === 'recetas') {
       return recetas.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Icon name="silverware-fork-knife" size={48} color="#D4AF37" />
-          <Text style={styles.emptyText}>Sin recetas aún</Text>
+          <Icon name="silverware-fork-knife" size={48} color={colors.primary} />
+          <Text style={[styles.emptyText, { color: colors.text }]}>Sin recetas aún</Text>
         </View>
       ) : (
         <FlatList
@@ -244,70 +251,113 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Perfil del usuario */}
-      <View style={[styles.profileSection, { backgroundColor: colors.background }]}>
-        <Image
-          source={{ uri: usuario.imagen_perfil }}
-          style={styles.profileImage}
-        />
-        <Text style={styles.userName}>{usuario.name}</Text>
-        <Text style={styles.userDescription}>{usuario.descripcion || ''}</Text>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Perfil del usuario */}
+        <View
+          style={[
+            styles.profileSection,
+            {
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.profileHeaderRow}>
+            <View style={styles.profileImageContainer}>
+              {usuario.imagen_perfil ? (
+                <View style={styles.profileImageWrapper}>
+                  <Image
+                    source={{ uri: usuario.imagen_perfil }}
+                    style={styles.profileImage}
+                    onLoadStart={() => setProfileImageLoading(true)}
+                    onLoadEnd={() => setProfileImageLoading(false)}
+                    onError={() => setProfileImageLoading(false)}
+                  />
+                  {profileImageLoading && (
+                    <View style={[styles.profileImageLoadingOverlay, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
+                  <Icon name="account-circle" size={90} color="#D1D5DB" />
+                </View>
+              )}
+            </View>
 
-        {/* Stats */}
-        <View style={styles.statsContainer}>
-          <TouchableOpacity
-            style={styles.statItem}
-            onPress={() => cargarListaSeguidores('seguidores')}
-          >
-            <Text style={[styles.statNumber, { color: colors.text }]}>{usuario.total_seguidores || 0}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Seguidores</Text>
-          </TouchableOpacity>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.text }]}>{usuario.total_recetas || 0}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Recetas</Text>
+            {/* Stats */}
+            <View style={styles.statsContainer}>
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={() => cargarListaSeguidores('seguidores')}
+              >
+                <Text style={[styles.statNumber, { color: colors.text }]}>{usuario.total_seguidores || 0}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Seguidores</Text>
+              </TouchableOpacity>
+              <View style={styles.statItem}>
+                <Text style={[styles.statNumber, { color: colors.text }]}>{usuario.total_recetas || 0}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Recetas</Text>
+              </View>
+            </View>
           </View>
+
+          <Text style={[styles.userName, { color: colors.text }]}>{usuario.name}</Text>
+          {!!usuario.descripcion && (
+            <Text style={[styles.userDescription, { color: colors.textSecondary }]}>{usuario.descripcion}</Text>
+          )}
+
+          {/* Botón de seguir - solo mostrar si no es su propio perfil */}
+          {!esMiPerfil && (
+            <TouchableOpacity
+              style={[
+                styles.seguirButton,
+                { backgroundColor: siguiendo ? colors.surface : colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={handleSeguir}
+            >
+              <Icon
+                name={siguiendo ? 'check' : 'plus'}
+                size={18}
+                color={siguiendo ? colors.primary : '#FFFFFF'}
+              />
+              <Text style={[styles.seguirButtonText, { color: siguiendo ? colors.primary : '#FFFFFF' }]}>
+                {siguiendo ? 'Siguiendo' : 'Seguir'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Botón de seguir - solo mostrar si no es su propio perfil */}
-        {!esMiPerfil && (
+        {/* Tabs */}
+        <View style={[styles.tabsContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <TouchableOpacity
             style={[
-              styles.seguirButton,
-              siguiendo && styles.siguiendoButton,
+              styles.tab,
+              tab === 'recetas' && { borderBottomColor: colors.primary },
             ]}
-            onPress={handleSeguir}
+            onPress={() => setTab('recetas')}
           >
-            <Icon
-              name={siguiendo ? 'check' : 'plus'}
-              size={18}
-              color={siguiendo ? colors.primary : '#FFFFFF'}
-            />
-            <Text style={[
-              styles.seguirButtonText,
-              siguiendo && styles.siguiendoButtonText,
-            ]}>
-              {siguiendo ? 'Siguiendo' : 'Seguir'}
+            <Text
+              style={[
+                styles.tabText,
+                tab === 'recetas' && styles.tabTextActive,
+                { color: tab === 'recetas' ? colors.primary : colors.textSecondary },
+              ]}
+            >
+              Recetas
             </Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
 
-      {/* Tabs */}
-      <View style={[styles.tabsContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'recetas' && styles.tabActive]}
-          onPress={() => setTab('recetas')}
-        >
-          <Text style={[styles.tabText, tab === 'recetas' && styles.tabTextActive, { color: tab === 'recetas' ? colors.primary : colors.textSecondary }]}>
-            Recetas
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Contenido */}
-      <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-        {renderContent()}
-      </View>
+        {/* Contenido */}
+        <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
+          {renderContent()}
+        </View>
+      </ScrollView>
 
       {/* Modal de Lista de Seguidores */}
       <Modal
@@ -315,13 +365,13 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
         animationType="slide"
         onRequestClose={() => setMostrarListaSeguidores(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
           {/* Header Modal */}
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setMostrarListaSeguidores(false)}>
-              <Icon name="close" size={24} color="#1F2937" />
+              <Icon name="close" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
               {tipoLista === 'seguidores' ? 'Seguidores' : 'Siguiendo'}
             </Text>
             <View style={{ width: 24 }} />
@@ -344,7 +394,7 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
               renderItem={({ item }) => (
                 <UsuarioListItem
                   usuario={item}
-                  navigation={navigation}
+                  colors={colors}
                   onPress={() => {
                     setMostrarListaSeguidores(false);
                     navigation.push('UsuarioPerfil', { usuarioId: item.id });
@@ -407,34 +457,65 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 24,
-    alignItems: 'center',
-    borderBottomWidth: 8,
-    borderBottomColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'stretch',
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 12,
+  },
+  profileImageContainer: {
+    width: 96,
+    height: 96,
+  },
+  profileImageWrapper: {
+    width: 96,
+    height: 96,
+    position: 'relative',
   },
   profileImage: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    marginBottom: 12,
+  },
+  profileImageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 48,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImagePlaceholder: {
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   userName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   userDescription: {
     fontSize: 14,
     color: '#6B7280',
     marginBottom: 16,
-    paddingHorizontal: 16,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   statsContainer: {
+    flex: 1,
     flexDirection: 'row',
-    marginBottom: 20,
-    paddingHorizontal: 16,
+    justifyContent: 'space-around',
+    paddingVertical: 10,
   },
   statItem: {
     flex: 1,
@@ -520,6 +601,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -587,6 +670,8 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     borderRadius: 8,
     marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   listAvatar: {
     width: 48,
