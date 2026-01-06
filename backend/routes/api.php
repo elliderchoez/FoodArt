@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RecetaController;
 use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\SeguidorController;
+use App\Http\Controllers\RatingController;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
@@ -17,6 +18,7 @@ Route::post('/upload-image', [AuthController::class, 'uploadImage']);
 Route::get('/recetas', [RecetaController::class, 'index']);
 Route::get('/recetas/search', [RecetaController::class, 'search']);
 Route::get('/recetas/{id}', [RecetaController::class, 'show']);
+Route::get('/recetas/{id}/rating', [RatingController::class, 'show']);
 Route::get('/comentarios/{receta_id}', [ComentarioController::class, 'index']);
 
 // Rutas públicas de usuarios
@@ -38,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/recetas/{id}', [RecetaController::class, 'destroy']);
     Route::post('/recetas/{id}/like', [RecetaController::class, 'like']);
     Route::post('/recetas/{id}/save', [RecetaController::class, 'save']);
+    Route::post('/recetas/{id}/rating', [RatingController::class, 'store']);
     Route::get('/user/recetas', [RecetaController::class, 'userRecetas']);
     Route::get('/user/recetas-guardadas', [RecetaController::class, 'savedRecetas']);
     Route::get('/user/recetas-con-like', [RecetaController::class, 'likedRecetas']);

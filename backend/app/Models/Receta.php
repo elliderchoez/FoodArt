@@ -52,6 +52,27 @@ class Receta extends Model
         return $this->hasMany(RecetaGuardada::class, 'receta_id');
     }
 
+    public function ratings()
+    {
+        return $this->hasMany(Rating::class, 'receta_id');
+    }
+
+    /**
+     * Obtener promedio de rating (float) o null si no hay.
+     */
+    public function ratingAverage()
+    {
+        return $this->ratings()->avg('rating');
+    }
+
+    /**
+     * Contador de ratings
+     */
+    public function ratingCount()
+    {
+        return $this->ratings()->count();
+    }
+
     // Scope: obtener recetas ordenadas por fecha
     public function scopeLatest($query)
     {
