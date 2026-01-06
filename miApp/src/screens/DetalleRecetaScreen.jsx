@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import StarRating from '../components/StarRating';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -404,6 +405,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           <TouchableOpacity style={styles.actionBtn} onPress={compartirReceta}>
             <MaterialCommunityIcons name="share-variant" size={24} color="#D4AF37" />
           </TouchableOpacity>
+        </View>
+
+        {/* Rating (estrellas) */}
+        <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+          <StarRating recetaId={recetaCompleta.id} />
         </View>
 
         {/* Info rápida */}
