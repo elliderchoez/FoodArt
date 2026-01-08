@@ -17,8 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 
 // Componente de Post/Receta (similar al HomeScreen)
@@ -148,35 +147,15 @@ export const BuscarScreen = ({ navigation }) => {
   }, []);
 
   const cargarRecetasDesdeApi = useCallback(async (tk, params) => {
-    const headers = { 'Content-Type': 'application/json' };
-    if (tk) headers['Authorization'] = `Bearer ${tk}`;
-
     const query = new URLSearchParams(params);
-    const url = `${API_URL}/recetas/search?${query.toString()}`;
-
-    const response = await fetch(url, { headers });
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data?.message || 'No se pudieron cargar las recetas';
-      throw new Error(message);
-    }
+    const { data } = await apiClient.get(`/recetas/search?${query.toString()}`);
 
     const list = Array.isArray(data?.data) ? data.data : [];
     return list.map(mapRecetaApiToPost);
   }, [mapRecetaApiToPost]);
 
   const cargarFeedRecetas = useCallback(async (tk) => {
-    const headers = { 'Content-Type': 'application/json' };
-    if (tk) headers['Authorization'] = `Bearer ${tk}`;
-
-    const response = await fetch(`${API_URL}/recetas`, { headers });
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data?.message || 'No se pudieron cargar las recetas';
-      throw new Error(message);
-    }
+    const { data } = await apiClient.get(`/recetas`);
 
     const list = Array.isArray(data?.data) ? data.data : [];
     return list.map(mapRecetaApiToPost);

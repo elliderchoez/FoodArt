@@ -12,8 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import { useNotificationCount } from '../context/NotificationContext';
 import {
@@ -124,36 +123,13 @@ export const AlertasScreen = ({ navigation }) => {
   const cargarAlertas = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      if (!token) {
-        console.warn('No hay token');
-        return;
-      }
-
       // Obtener notificaciones del backend
-      const response = await fetch(`${API_URL}/notifications`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const notificaciones = await response.json();
-        setAlertas(notificaciones);
-        // Contar no leídas
-        const noLeidas = notificaciones.filter((n) => !n.read).length;
-        setUnreadCount(noLeidas);
-        setGlobalUnreadCount(noLeidas); // Actualizar el contexto global
-      } else {
-        console.error('Error cargando notificaciones del backend');
-        // Fallback a almacenamiento local
-        const notificaciones = await getStoredNotifications();
-        setAlertas(notificaciones);
-        const noLeidas = notificaciones.filter((n) => !n.read).length;
-        setGlobalUnreadCount(noLeidas);
-      }
+      const { data } = await apiClient.get(`/notifications`);
+      setAlertas(data);
+      // Contar no leídas
+      const noLeidas = data.filter((n) => !n.read).length;
+      setUnreadCount(noLeidas);
+      setGlobalUnreadCount(noLeidas); // Actualizar el contexto global
     } catch (error) {
       console.error('Error cargando alertas:', error);
       // Fallback a almacenamiento local
@@ -168,17 +144,8 @@ export const AlertasScreen = ({ navigation }) => {
 
   const handleNotificationPress = async (alerta) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      if (token) {
-        // Marcar como leída en el backend
-        await fetch(`${API_URL}/notifications/${alerta.id}/read`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
+      // Marcar como leída en el backend
+      await apiClient.put(`/notifications/${alerta.id}/read`);
 
       setAlertas((prev) => {
         const actualizado = prev.map((n) => (n.id === alerta.id ? { ...n, read: true } : n));
@@ -210,16 +177,7 @@ export const AlertasScreen = ({ navigation }) => {
 
   const handleDeleteNotification = async (notificationId) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      if (token) {
-        await fetch(`${API_URL}/notifications/${notificationId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
+      await apiClient.delete(`/notifications/${notificationId}`);
       setAlertas((prev) => {
         const actualizado = prev.filter((n) => n.id !== notificationId);
         // Actualizar el conteo de notificaciones no leídas

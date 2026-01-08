@@ -14,8 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 
 export default function CrearRecetaScreen({ navigation }) {
   const [titulo, setTitulo] = useState('');
@@ -77,17 +76,14 @@ export default function CrearRecetaScreen({ navigation }) {
         name: `receta_${Date.now()}.jpg`,
       });
 
-      const response = await fetch(`${API_URL}/upload-image`, {
-        method: 'POST',
-        body: formData,
+      const { data } = await apiClient.post(`/upload-image`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
-      const datos = await response.json();
-      if (response.ok && datos.url) {
-        return datos.url;
+      if (data.url) {
+        return data.url;
       }
       throw new Error('Error al subir imagen');
     } catch (error) {
@@ -180,22 +176,9 @@ export default function CrearRecetaScreen({ navigation }) {
       console.log('Datos de receta a enviar:', JSON.stringify(datosReceta, null, 2));
 
       // Enviar a API
-      const response = await fetch(`${API_URL}/recetas`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(datosReceta),
-      });
+      const { data: responseData } = await apiClient.post(`/recetas`, datosReceta);
 
-      const responseData = await response.json();
-      console.log('Response status:', response.status);
       console.log('Response data:', responseData);
-
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Error al publicar receta');
-      }
 
       Alert.alert('Éxito', '¡Receta publicada con éxito!', [
         {
@@ -205,7 +188,7 @@ export default function CrearRecetaScreen({ navigation }) {
       ]);
     } catch (error) {
       console.error('Error publishing recipe:', error);
-      Alert.alert('Error', error.message || 'Error al publicar la receta');
+      Alert.alert('Error', error.response?.data?.message || error.message || 'Error al publicar la receta');
     } finally {
       setLoading(false);
     }
