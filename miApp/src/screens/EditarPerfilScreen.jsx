@@ -12,9 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiClient from '../services/apiClient';
 import * as ImagePicker from 'expo-image-picker';
-import { API_URL } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 export const EditarPerfilScreen = ({ navigation, route }) => {
@@ -105,7 +104,6 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
 
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('authToken');
       let fotoUrl = usuario?.imagen_perfil;
 
       // Si hay una foto seleccionada, subirla primero
@@ -118,31 +116,13 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
         });
 
         try {
-          const respuestaImagen = await fetch(`${API_URL}/upload-image`, {
-            method: 'POST',
+          const { data: datosImagen } = await apiClient.post('/upload-image', formData, {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
             },
-            body: formData,
           });
-
-          console.log('Respuesta imagen status:', respuestaImagen.status);
-          const textoRespuesta = await respuestaImagen.text();
-          console.log('Respuesta imagen text:', textoRespuesta);
-
-          if (respuestaImagen.ok) {
-            try {
-              const datosImagen = JSON.parse(textoRespuesta);
-              fotoUrl = datosImagen.url || datosImagen.path || datosImagen.imagen_url;
-              console.log('URL imagen obtenida:', fotoUrl);
-            } catch (e) {
-              console.log('Error al parsear JSON:', e);
-              fotoUrl = textoRespuesta;
-            }
-          } else {
-            console.log('Error uploading image, status:', respuestaImagen.status);
-            Alert.alert('Advertencia', 'No se pudo cambiar la foto, pero continuaré con otros cambios');
-          }
+          fotoUrl = datosImagen.url || datosImagen.path || datosImagen.imagen_url;
+          console.log('URL imagen obtenida:', fotoUrl);
         } catch (errorImagen) {
           console.error('Error en upload imagen:', errorImagen);
           Alert.alert('Advertencia', 'Error al subir imagen, continuaré con otros cambios');
@@ -152,33 +132,18 @@ export const EditarPerfilScreen = ({ navigation, route }) => {
       // Actualizar perfil en la BD
       console.log('Actualizando perfil con datos:', { nombre, descripcion, imagen_perfil: fotoUrl });
       
-      const respuesta = await fetch(`${API_URL}/user/update-profile`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: nombre,
-          descripcion: descripcion,
-          imagen_perfil: fotoUrl,
-        }),
+      await apiClient.put('/user/update-profile', {
+        name: nombre,
+        descripcion: descripcion,
+        imagen_perfil: fotoUrl,
       });
 
-      console.log('Respuesta perfil status:', respuesta.status);
-      const textoRespuestaPerfil = await respuesta.text();
-      console.log('Respuesta perfil:', textoRespuestaPerfil);
-
-      if (respuesta.ok) {
-        Alert.alert('Éxito', 'Perfil actualizado correctamente');
-        // Volver al perfil y refrescar datos
-        navigation.goBack();
-        setTimeout(() => {
-          navigation.navigate('Perfil');
-        }, 500);
-      } else {
-        Alert.alert('Error', `No se pudo actualizar el perfil: ${respuesta.status}`);
-      }
+      Alert.alert('Éxito', 'Perfil actualizado correctamente');
+      // Volver al perfil y refrescar datos
+      navigation.goBack();
+      setTimeout(() => {
+        navigation.navigate('Perfil');
+      }, 500);
     } catch (error) {
       console.error('Error general:', error);
       Alert.alert('Error', `Error al actualizar el perfil: ${error.message}`);

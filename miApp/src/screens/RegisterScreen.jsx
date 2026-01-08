@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 
 export const RegisterScreen = ({ navigation }) => {
@@ -160,25 +160,22 @@ export const RegisterScreen = ({ navigation }) => {
           });
 
           console.log('Subiendo imagen...');
-          const uploadResponse = await fetch(`${API_URL}/upload-image`, {
-            method: 'POST',
-            body: formData,
-          });
+          try {
+            const { data: uploadData } = await apiClient.post('/upload-image', formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            });
+            console.log('Upload data parsed:', uploadData);
 
-          const uploadDataText = await uploadResponse.text();
-          console.log('Upload response text:', uploadDataText);
-          const uploadData = JSON.parse(uploadDataText);
-          console.log('Upload data parsed:', uploadData);
-
-          if (!uploadResponse.ok) {
-            console.error('Upload error:', uploadData);
-            Alert.alert('Error en imagen', uploadData.message || 'No se pudo subir la imagen');
+            // El servidor retorna URL completa
+            imagenUrl = uploadData.url;
+            console.log('Imagen URL final:', imagenUrl);
+          } catch (uploadErr) {
+            console.error('Upload error:', uploadErr.response?.data);
+            Alert.alert('Error en imagen', uploadErr.response?.data?.message || 'No se pudo subir la imagen');
             return;
           }
-
-          // El servidor retorna URL completa
-          imagenUrl = uploadData.url;
-          console.log('Imagen URL final:', imagenUrl);
         } catch (uploadError) {
           console.error('Error uploading image:', uploadError);
           Alert.alert('Error', 'No se pudo procesar la imagen');
@@ -202,32 +199,22 @@ export const RegisterScreen = ({ navigation }) => {
 
       console.log('Datos de registro:', registerData);
 
-      const response = await fetch(`${API_URL}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registerData),
-      });
+      try {
+        const { data } = await apiClient.post('/register', registerData);
+        console.log('Response data:', data);
 
-      const data = await response.json();
-      console.log('Response status:', response.status);
-      console.log('Response data:', data);
-
-      if (response.ok) {
         Alert.alert('Éxito', 'Cuenta creada correctamente. Ahora inicia sesión.');
         navigation.replace('Login');
-      } else {
-        const fieldMessages = data?.errors
-          ? Object.values(data.errors).flat().filter(Boolean)
+      } catch (error) {
+        const fieldMessages = error.response?.data?.errors
+          ? Object.values(error.response.data.errors).flat().filter(Boolean)
           : [];
 
         if (fieldMessages.length) {
           setFormError(fieldMessages.join('\n'));
         } else {
-          setFormError(data?.message || data?.error || 'Error al registrarse');
+          setFormError(error.response?.data?.message || error.response?.data?.error || 'Error al registrarse');
         }
-      }
     } catch (error) {
       console.error('Error en registro:', error);
       setFormError('No se pudo conectar con el servidor');

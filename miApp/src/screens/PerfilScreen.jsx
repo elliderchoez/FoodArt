@@ -93,124 +93,72 @@ export const PerfilScreen = ({ navigation }) => {
     setLoadingGuardadas(true);
     setLoadingConLike(true);
     try {
-      const tk = await AsyncStorage.getItem('authToken');
-      if (!isCancelled()) setToken(tk);
-      
-      if (!tk) {
-        Alert.alert('Error', 'No autenticado');
-        if (!isCancelled()) setLoading(false);
-        return;
-      }
-
       // Obtener datos del usuario
-      const respuestaUsuario = await fetch(`${API_URL}/user`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${tk}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (respuestaUsuario.ok) {
-        const datosUsuario = await respuestaUsuario.json();
-        if (!isCancelled()) {
-          setUsuario(datosUsuario);
-          setNewDescription(datosUsuario.descripcion || '');
-          // dejamos de bloquear el render aquí
-          setLoading(false);
-        }
-
-        // Cargar stats y listas en paralelo (sin bloquear pantalla)
-        const userId = datosUsuario.id;
-
-        (async () => {
-          try {
-            const [resSeguidores, resSeguidos] = await Promise.allSettled([
-              fetch(`${API_URL}/usuarios/${userId}/seguidores`),
-              fetch(`${API_URL}/usuarios/${userId}/siguiendo`),
-            ]);
-
-            if (resSeguidores.status === 'fulfilled' && resSeguidores.value.ok) {
-              const datos = await resSeguidores.value.json();
-              if (!isCancelled()) setSeguidores(datos.total || 0);
-            }
-
-            if (resSeguidos.status === 'fulfilled' && resSeguidos.value.ok) {
-              const datos = await resSeguidos.value.json();
-              if (!isCancelled()) setSeguidos(datos.total || 0);
-            }
-          } catch (e) {
-            // silencioso: no bloquea el perfil
-          } finally {
-            if (!isCancelled()) setLoadingStats(false);
-          }
-        })();
-
-        (async () => {
-          try {
-            const respuestaRecetas = await fetch(`${API_URL}/user/recetas`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${tk}`,
-                'Content-Type': 'application/json',
-              },
-            });
-
-            if (respuestaRecetas.ok) {
-              const datosRecetas = await respuestaRecetas.json();
-              if (!isCancelled()) setRecetas(datosRecetas.data || datosRecetas || []);
-            }
-          } catch (e) {
-            // silencioso
-          } finally {
-            if (!isCancelled()) setLoadingMisRecetas(false);
-          }
-        })();
-
-        (async () => {
-          try {
-            const respuesta = await fetch(`${API_URL}/user/recetas-guardadas`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${tk}`,
-                'Content-Type': 'application/json',
-              },
-            });
-
-            if (respuesta.ok) {
-              const datos = await respuesta.json();
-              if (!isCancelled()) setRecetasGuardadas(datos.data || datos || []);
-            }
-          } catch (e) {
-            // silencioso
-          } finally {
-            if (!isCancelled()) setLoadingGuardadas(false);
-          }
-        })();
-
-        (async () => {
-          try {
-            const respuesta = await fetch(`${API_URL}/user/recetas-con-like`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${tk}`,
-                'Content-Type': 'application/json',
-              },
-            });
-
-            if (respuesta.ok) {
-              const datos = await respuesta.json();
-              if (!isCancelled()) setRecetasConLike(datos.data || datos || []);
-            }
-          } catch (e) {
-            // silencioso
-          } finally {
-            if (!isCancelled()) setLoadingConLike(false);
-          }
-        })();
-      } else {
-        Alert.alert('Error', 'No se pudieron cargar los datos del perfil');
+      const datosUsuario = await apiClient.get('/user');
+      if (!isCancelled()) {
+        setUsuario(datosUsuario.data);
+        setNewDescription(datosUsuario.data.descripcion || '');
+        setLoading(false);
       }
+
+      // Cargar stats y listas en paralelo (sin bloquear pantalla)
+      const userId = datosUsuario.data.id;
+
+      (async () => {
+        try {
+          const [resSeguidores, resSeguidos] = await Promise.allSettled([
+            apiClient.get(`/usuarios/${userId}/seguidores`),
+            apiClient.get(`/usuarios/${userId}/siguiendo`),
+          ]);
+
+          if (resSeguidores.status === 'fulfilled') {
+            const datos = resSeguidores.value.data;
+            if (!isCancelled()) setSeguidores(datos.total || 0);
+          }
+
+          if (resSeguidos.status === 'fulfilled') {
+            const datos = resSeguidos.value.data;
+            if (!isCancelled()) setSeguidos(datos.total || 0);
+          }
+        } catch (e) {
+          // silencioso: no bloquea el perfil
+        } finally {
+          if (!isCancelled()) setLoadingStats(false);
+        }
+      })();
+
+      (async () => {
+        try {
+          const datosRecetas = await apiClient.get('/user/recetas');
+          if (!isCancelled()) setRecetas(datosRecetas.data.data || datosRecetas.data || []);
+        } catch (e) {
+          // silencioso
+        } finally {
+          if (!isCancelled()) setLoadingMisRecetas(false);
+        }
+      })();
+
+      (async () => {
+        try {
+          const datos = await apiClient.get('/user/recetas-guardadas');
+          if (!isCancelled()) setRecetasGuardadas(datos.data.data || datos.data || []);
+        } catch (e) {
+          // silencioso
+        } finally {
+          if (!isCancelled()) setLoadingGuardadas(false);
+        }
+      })();
+
+      (async () => {
+        try {
+          const datos = await apiClient.get('/user/recetas-con-like');
+          if (!isCancelled()) setRecetasConLike(datos.data.data || datos.data || []);
+        } catch (e) {
+          // silencioso
+        } finally {
+          if (!isCancelled()) setLoadingConLike(false);
+        }
+      })();
     } catch (error) {
       console.error('Error cargando perfil:', error);
       Alert.alert('Error', 'Error al cargar el perfil');
@@ -252,22 +200,13 @@ export const PerfilScreen = ({ navigation }) => {
     if (!usuario) return;
 
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      const respuesta = await fetch(`${API_URL}/user/update-description`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          descripcion: newDescription,
-        }),
+      await apiClient.put('/user/update-description', {
+        descripcion: newDescription,
       });
 
-      if (respuesta.ok) {
-        setUsuario({ ...usuario, descripcion: newDescription });
-        setEditingDescription(false);
-        Alert.alert('Éxito', 'Descripción actualizada');
+      setUsuario({ ...usuario, descripcion: newDescription });
+      setEditingDescription(false);
+      Alert.alert('Éxito', 'Descripción actualizada');
       } else {
         Alert.alert('Error', 'No se pudo actualizar la descripción');
       }
@@ -285,17 +224,10 @@ export const PerfilScreen = ({ navigation }) => {
     try {
       if (!usuario) return;
 
-      const url = tipo === 'seguidores'
-        ? `${API_URL}/usuarios/${usuario.id}/seguidores`
-        : `${API_URL}/usuarios/${usuario.id}/siguiendo`;
-
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setListaUsuarios(data.data || []);
-        setTipoLista(tipo);
-        setMostrarListaSeguidores(true);
-      }
+      const { data } = await apiClient.get(`/usuarios/${usuario.id}/${tipo === 'seguidores' ? 'seguidores' : 'siguiendo'}`);
+      setListaUsuarios(data.data || []);
+      setTipoLista(tipo);
+      setMostrarListaSeguidores(true);
     } catch (error) {
       console.error('Error cargando lista:', error);
       Alert.alert('Error', 'No se pudo cargar la lista');
