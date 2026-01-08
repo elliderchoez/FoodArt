@@ -13,14 +13,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
+import { useAppContext } from '../context/AppContext';
 import { UsuarioManager } from '../services/UsuarioManager';
 import { useTheme } from '../context/ThemeContext';
 import { getStoredToken } from '../services/notificationService';
 
 export const LoginScreen = ({ navigation }) => {
+  const { login } = useAppContext();
   const { colors, isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,31 +64,14 @@ export const LoginScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-        }),
+      const { data } = await apiClient.post('/login', {
+        email: email.trim(),
+        password: password.trim(),
       });
 
-      const text = await response.text();
-      console.log('Response status:', response.status);
-      console.log('Response text:', text);
-
-      if (!text) {
-        Alert.alert('Error', 'El servidor no respondió correctamente. Verifica que el backend esté corriendo.');
-        return;
-      }
-
-      const data = JSON.parse(text);
-
-      if (response.ok && data.token) {
-        // Guardar token
-        await AsyncStorage.setItem('authToken', data.token);
+      if (data.token) {
+        // Guardar en AppContext
+        await login(data.user, data.token);
 
         // Sincronizar datos del usuario
         await UsuarioManager.sincronizarDesdeAPI(data.token);
@@ -97,40 +81,29 @@ export const LoginScreen = ({ navigation }) => {
         try {
           const pushToken = await getStoredToken();
           if (pushToken) {
-            const registerResponse = await fetch(`${API_URL}/notifications/register-token`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${data.token}`,
-              },
-              body: JSON.stringify({ token: pushToken }),
+            await apiClient.post('/notifications/register-token', {
+              token: pushToken,
+              device_name: 'mobile-app',
             });
-            if (registerResponse.ok) {
-              console.log('✅ Token de notificaciones registrado en el backend');
-            }
+            console.log('✅ Token de notificaciones registrado en el backend');
           } else {
             console.warn('⚠️ No hay token de notificaciones (Expo Go limitación)');
           }
-        } catch (error) {
-          console.warn('Advertencia registrando token:', error.message);
-          // Continuamos aunque falle el registro de notificaciones
+        } catch (notifError) {
+          console.warn('Advertencia registrando token:', notifError.message);
         }
 
         navigation.replace('Home');
-      } else {
-        // Laravel puede responder {message} o {errors:{...}}
-        const serverMessage =
-          data?.message ||
-          (data?.errors
-            ? Object.values(data.errors).flat().filter(Boolean).join('\n')
-            : '') ||
-          'Credenciales incorrectas';
-
-        setFormError(serverMessage);
       }
     } catch (error) {
       console.error('Error en login:', error);
-      setFormError(`No se pudo conectar con el servidor: ${error.message}`);
+      if (error.response?.status === 401) {
+        setFormError('Correo o contraseña incorrectos');
+      } else if (error.message === 'Network Error') {
+        setFormError('No se pudo conectar con el servidor');
+      } else {
+        setFormError(error.response?.data?.message || 'Error desconocido');
+      }
     } finally {
       setLoading(false);
     }
