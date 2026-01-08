@@ -13,8 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 
 // Componente para mostrar un usuario en lista
@@ -57,15 +56,8 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
         setToken(tk);
 
         if (tk) {
-          const responseActual = await fetch(`${API_URL}/user`, {
-            headers: {
-              'Authorization': `Bearer ${tk}`,
-            },
-          });
-          if (responseActual.ok) {
-            const userData = await responseActual.json();
-            setEsMiPerfil(userData.id === usuarioId);
-          }
+          const { data: userData } = await apiClient.get(`/user`);
+          setEsMiPerfil(userData.id === usuarioId);
         }
 
         await cargarPerfilUsuario(tk);
@@ -80,26 +72,13 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
   const cargarPerfilUsuario = async (tk) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/usuarios/${usuarioId}/perfil`);
-
-      if (!response.ok) {
-        throw new Error('Usuario no encontrado');
-      }
-
-      const data = await response.json();
+      const { data } = await apiClient.get(`/usuarios/${usuarioId}/perfil`);
       setUsuario(data.user);
       setRecetas(data.recetas || []);
 
       if (tk) {
-        const responseFollow = await fetch(`${API_URL}/usuarios/${usuarioId}/verificar-seguimiento`, {
-          headers: {
-            'Authorization': `Bearer ${tk}`,
-          },
-        });
-        if (responseFollow.ok) {
-          const followData = await responseFollow.json();
-          setSiguiendo(followData.following);
-        }
+        const { data: followData } = await apiClient.get(`/usuarios/${usuarioId}/verificar-seguimiento`);
+        setSiguiendo(followData.following);
       }
     } catch (error) {
       console.error('Error cargando perfil:', error);
@@ -138,36 +117,25 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
     }
 
     try {
-      const url = siguiendo
-        ? `${API_URL}/usuarios/${usuarioId}/dejar-de-seguir`
-        : `${API_URL}/usuarios/${usuarioId}/seguir`;
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const nuevoEstadoSiguiendo = !siguiendo;
-        setSiguiendo(nuevoEstadoSiguiendo);
-        
-        // Actualizar el contador inmediatamente
-        setUsuario(prev => ({
-          ...prev,
-          total_seguidores: nuevoEstadoSiguiendo 
-            ? prev.total_seguidores + 1 
-            : prev.total_seguidores - 1,
-        }));
+      if (siguiendo) {
+        await apiClient.post(`/usuarios/${usuarioId}/dejar-de-seguir`);
       } else {
-        const error = await response.json();
-        Alert.alert('Error', error.message || 'No se pudo completar la acción');
+        await apiClient.post(`/usuarios/${usuarioId}/seguir`);
       }
+
+      const nuevoEstadoSiguiendo = !siguiendo;
+      setSiguiendo(nuevoEstadoSiguiendo);
+      
+      // Actualizar el contador inmediatamente
+      setUsuario(prev => ({
+        ...prev,
+        total_seguidores: nuevoEstadoSiguiendo 
+          ? prev.total_seguidores + 1 
+          : prev.total_seguidores - 1,
+      }));
     } catch (error) {
       console.error('Error:', error);
-      Alert.alert('Error', 'Ocurrió un error');
+      Alert.alert('Error', error.response?.data?.message || 'Ocurrió un error');
     }
   };
 

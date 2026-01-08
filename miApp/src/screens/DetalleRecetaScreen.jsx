@@ -86,15 +86,8 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       // Obtener usuario actual para saber si es su receta
       if (tk) {
         try {
-          const response = await fetch(`${API_URL}/user`, {
-            headers: {
-              'Authorization': `Bearer ${tk}`,
-            },
-          });
-          if (response.ok) {
-            const userData = await response.json();
-            setEsMiReceta(userData.id === receta.user_id);
-          }
+          const { data: userData } = await apiClient.get(`/user`);
+          setEsMiReceta(userData.id === receta.user_id);
         } catch (error) {
           console.error('Error obteniendo usuario:', error);
         }
@@ -115,22 +108,14 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
   const cargarDetalleReceta = async (tk = null) => {
     try {
-      const tokenAUsar = tk || token;
-      const response = await fetch(`${API_URL}/recetas/${receta.id}`, {
-        headers: {
-          ...(tokenAUsar && { 'Authorization': `Bearer ${tokenAUsar}` }),
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setRecetaCompleta(data);
-        // Actualizar estados de like y saved
-        setLiked(data.user_liked || false);
-        setSaved(data.user_saved || false);
-        setSiguiendo(data.user_follows_author || false);
-        console.log('Receta cargada:', data);
-        console.log('user_liked:', data.user_liked, 'user_saved:', data.user_saved);
-      }
+      const { data } = await apiClient.get(`/recetas/${receta.id}`);
+      setRecetaCompleta(data);
+      // Actualizar estados de like y saved
+      setLiked(data.user_liked || false);
+      setSaved(data.user_saved || false);
+      setSiguiendo(data.user_follows_author || false);
+      console.log('Receta cargada:', data);
+      console.log('user_liked:', data.user_liked, 'user_saved:', data.user_saved);
     } catch (error) {
       console.error('Error cargando detalle:', error);
     }
@@ -138,11 +123,8 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
   const cargarComentarios = async () => {
     try {
-      const response = await fetch(`${API_URL}/comentarios/${receta.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setComentarios(Array.isArray(data) ? data : data.data || []);
-      }
+      const { data } = await apiClient.get(`/comentarios/${receta.id}`);
+      setComentarios(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
       console.error('Error cargando comentarios:', error);
     }
@@ -159,22 +141,9 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       const nuevoEstadoLike = !liked;
       setLiked(nuevoEstadoLike);
 
-      const response = await fetch(`${API_URL}/recetas/${receta.id}/like`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        // Recargar receta para actualizar el contador de likes
-        cargarDetalleReceta();
-      } else {
-        // Revertir el estado si hay error
-        setLiked(!nuevoEstadoLike);
-        Alert.alert('Error', 'No se pudo dar like');
-      }
+      await apiClient.post(`/recetas/${receta.id}/like`);
+      // Recargar receta para actualizar el contador de likes
+      cargarDetalleReceta();
     } catch (error) {
       // Revertir el estado si hay error
       setLiked(!liked);
@@ -194,21 +163,8 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       const nuevoEstadoSave = !saved;
       setSaved(nuevoEstadoSave);
 
-      const response = await fetch(`${API_URL}/recetas/${receta.id}/save`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        Alert.alert('Éxito', nuevoEstadoSave ? 'Receta guardada' : 'Receta eliminada de guardadas');
-      } else {
-        // Revertir el estado si hay error
-        setSaved(!nuevoEstadoSave);
-        Alert.alert('Error', 'No se pudo guardar la receta');
-      }
+      await apiClient.post(`/recetas/${receta.id}/save`);
+      Alert.alert('Éxito', nuevoEstadoSave ? 'Receta guardada' : 'Receta eliminada de guardadas');
     } catch (error) {
       // Revertir el estado si hay error
       setSaved(!saved);
@@ -229,26 +185,17 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     }
 
     try {
-      const response = await fetch(`${API_URL}/comentarios/${receta.id}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contenido: nuevoComentario,
-          calificacion: nuevaCalificacion,
-        }),
+      await apiClient.post(`/comentarios/${receta.id}`, {
+        contenido: nuevoComentario,
+        calificacion: nuevaCalificacion,
       });
 
-      if (response.ok) {
-        setNuevoComentario('');
-        setNuevaCalificacion(0);
-        setMostrarModalResena(false);
-        Alert.alert('Éxito', 'Comentario publicado');
-        cargarComentarios();
-        cargarDetalleReceta();
-      }
+      setNuevoComentario('');
+      setNuevaCalificacion(0);
+      setMostrarModalResena(false);
+      Alert.alert('Éxito', 'Comentario publicado');
+      cargarComentarios();
+      cargarDetalleReceta();
     } catch (error) {
       console.error('Error publicando comentario:', error);
       Alert.alert('Error', 'No se pudo publicar el comentario');
@@ -276,30 +223,18 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       const nuevoEstadoSeguimiento = !siguiendo;
       setSiguiendo(nuevoEstadoSeguimiento);
 
-      const url = siguiendo
-        ? `${API_URL}/usuarios/${receta.user_id}/dejar-de-seguir`
-        : `${API_URL}/usuarios/${receta.user_id}/seguir`;
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        // Recargar para actualizar datos del usuario
-        await cargarDetalleReceta(token);
+      if (siguiendo) {
+        await apiClient.post(`/usuarios/${receta.user_id}/dejar-de-seguir`);
       } else {
-        setSiguiendo(!nuevoEstadoSeguimiento);
-        const error = await response.json();
-        Alert.alert('Error', error.message || 'No se pudo completar la acción');
+        await apiClient.post(`/usuarios/${receta.user_id}/seguir`);
       }
+
+      // Recargar para actualizar datos del usuario
+      await cargarDetalleReceta(token);
     } catch (error) {
       setSiguiendo(!siguiendo);
       console.error('Error:', error);
-      Alert.alert('Error', 'No se pudo completar la acción');
+      Alert.alert('Error', error.response?.data?.message || 'No se pudo completar la acción');
     }
   };
 
