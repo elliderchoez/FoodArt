@@ -12,8 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import { useNotificationCount } from '../context/NotificationContext';
 
@@ -94,23 +93,17 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
       setLiked(nuevoEstado);
       setLikesCount(nuevoEstado ? likesCount + 1 : Math.max(0, likesCount - 1));
 
-      const response = await fetch(`${API_URL}/recetas/${post.id}/like`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      await apiClient.post(`/recetas/${post.id}/like`);
 
-      if (!response.ok) {
-        setLiked(!nuevoEstado);
-        setLikesCount(!nuevoEstado ? likesCount + 1 : Math.max(0, likesCount - 1));
-        Alert.alert('Error', 'No se pudo dar like');
+      if (!nuevoEstado) {
+        setLiked(false);
+        setLikesCount(Math.max(0, likesCount - 1));
       }
     } catch (error) {
       console.error('Error dando like:', error);
       setLiked(!liked);
       setLikesCount(!liked ? likesCount + 1 : Math.max(0, likesCount - 1));
+      Alert.alert('Error', 'No se pudo dar like');
     }
   };
 
@@ -126,21 +119,11 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
       const nuevoEstado = !saved;
       setSaved(nuevoEstado);
 
-      const response = await fetch(`${API_URL}/recetas/${post.id}/save`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        setSaved(!nuevoEstado);
-        Alert.alert('Error', 'No se pudo guardar la receta');
-      }
+      await apiClient.post(`/recetas/${post.id}/save`);
     } catch (error) {
       console.error('Error guardando:', error);
       setSaved(!saved);
+      Alert.alert('Error', 'No se pudo guardar la receta');
     }
   };
 
@@ -227,19 +210,9 @@ export const HomeScreen = ({ navigation }) => {
 
   const cargarNotificacionesPendientes = async (tk) => {
     try {
-      const response = await fetch(`${API_URL}/notifications`, {
-        headers: {
-          'Authorization': `Bearer ${tk}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const notificaciones = data.data || [];
-        const noLeidas = notificaciones.filter((n) => !n.read).length;
-        // No necesitamos actualizar aquí porque AlertasScreen ya lo hace
-      }
+      const { data } = await apiClient.get(`/notifications`);
+      const notificaciones = data.data || [];
+      const noLeidas = notificaciones.filter((n) => !n.read).length;
     } catch (error) {
       console.error('Error cargando notificaciones pendientes:', error);
     }
@@ -304,21 +277,7 @@ export const HomeScreen = ({ navigation }) => {
     }
 
     try {
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      if (tk) {
-        headers['Authorization'] = `Bearer ${tk}`;
-      }
-
-      const response = await fetch(`${API_URL}/recetas?page=${pageToLoad}&per_page=${PAGE_SIZE}`, { headers });
-      
-      if (!response.ok) {
-        throw new Error('Error al cargar recetas');
-      }
-
-      const data = await response.json();
+      const { data } = await apiClient.get(`/recetas?page=${pageToLoad}&per_page=${PAGE_SIZE}`);
       
       // Transformar datos de la API al formato esperado por el componente
       const recetasFormateadas = (data.data || []).map(receta => ({
