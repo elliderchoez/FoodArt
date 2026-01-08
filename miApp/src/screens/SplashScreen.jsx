@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
 
 export const SplashScreen = ({ navigation }) => {
   useEffect(() => {
@@ -34,25 +34,13 @@ export const SplashScreen = ({ navigation }) => {
 
   const validateToken = async (token, navigation) => {
     try {
-      const response = await fetch(`${API_URL}/user`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        console.log('Token válido, ir a Home');
-        navigation.replace('Home');
-      } else {
-        console.log('Token inválido, ir a Login');
-        await AsyncStorage.removeItem('authToken');
-        navigation.replace('Login');
-      }
+      await apiClient.get(`/user`);
+      console.log('Token válido, ir a Home');
+      navigation.replace('Home');
     } catch (error) {
       console.error('Error validando token:', error);
       console.log('Error en validación, ir a Login');
+      await AsyncStorage.removeItem('authToken');
       navigation.replace('Login');
     }
   };
