@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
@@ -91,17 +92,14 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
   const cargarListaSeguidores = async (tipo) => {
     setLoadingLista(true);
     try {
-      const url = tipo === 'seguidores'
-        ? `${API_URL}/usuarios/${usuarioId}/seguidores`
-        : `${API_URL}/usuarios/${usuarioId}/siguiendo`;
+      const endpoint = tipo === 'seguidores'
+        ? `/usuarios/${usuarioId}/seguidores`
+        : `/usuarios/${usuarioId}/siguiendo`;
 
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setListaUsuarios(data.data || []);
-        setTipoLista(tipo);
-        setMostrarListaSeguidores(true);
-      }
+      const { data } = await apiClient.get(endpoint);
+      setListaUsuarios(data.data || []);
+      setTipoLista(tipo);
+      setMostrarListaSeguidores(true);
     } catch (error) {
       console.error('Error cargando lista:', error);
       Alert.alert('Error', 'No se pudo cargar la lista');

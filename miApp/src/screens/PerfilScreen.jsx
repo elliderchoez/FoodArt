@@ -207,9 +207,6 @@ export const PerfilScreen = ({ navigation }) => {
       setUsuario({ ...usuario, descripcion: newDescription });
       setEditingDescription(false);
       Alert.alert('Éxito', 'Descripción actualizada');
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar la descripción');
-      }
     } catch (error) {
       Alert.alert('Error', 'Error al actualizar la descripción');
     }

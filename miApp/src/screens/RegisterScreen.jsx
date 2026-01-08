@@ -215,9 +215,10 @@ export const RegisterScreen = ({ navigation }) => {
         } else {
           setFormError(error.response?.data?.message || error.response?.data?.error || 'Error al registrarse');
         }
+      }
     } catch (error) {
-      console.error('Error en registro:', error);
-      setFormError('No se pudo conectar con el servidor');
+      console.error('Error general en registro:', error);
+      setFormError('Error al registrarse');
     } finally {
       setLoading(false);
     }

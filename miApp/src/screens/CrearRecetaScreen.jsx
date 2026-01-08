@@ -9,8 +9,11 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -196,26 +199,27 @@ export default function CrearRecetaScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialCommunityIcons name="close" size={28} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nueva Receta</Text>
-        <TouchableOpacity
-          onPress={publicarReceta}
-          disabled={loading || uploadingImage}
-          style={[styles.publicarBtn, (loading || uploadingImage) && styles.disabled]}
-        >
-          {loading || uploadingImage ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.publicarBtnText}>Publicar</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <MaterialCommunityIcons name="close" size={28} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Nueva Receta</Text>
+          <TouchableOpacity
+            onPress={publicarReceta}
+            disabled={loading || uploadingImage}
+            style={[styles.publicarBtn, (loading || uploadingImage) && styles.disabled]}
+          >
+            {loading || uploadingImage ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.publicarBtnText}>Publicar</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Foto de la receta */}
         <TouchableOpacity style={styles.fotoContainer} onPress={seleccionarImagen}>
           {imagenUri ? (
@@ -341,6 +345,7 @@ export default function CrearRecetaScreen({ navigation }) {
 
         <View style={styles.spacer} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -379,6 +384,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.6,
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,

@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
@@ -109,7 +110,12 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const cargarDetalleReceta = async (tk = null) => {
     try {
       const { data } = await apiClient.get(`/recetas/${receta.id}`);
-      setRecetaCompleta(data);
+      // Hacer merge con los datos existentes para preservar la imagen original
+      setRecetaCompleta(prev => ({
+        ...prev,
+        ...data,
+        imagen: data.imagen || prev.imagen // Asegurar que la imagen se preserva
+      }));
       // Actualizar estados de like y saved
       setLiked(data.user_liked || false);
       setSaved(data.user_saved || false);
@@ -274,7 +280,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Imagen */}
         <Image
-          source={{ uri: recetaCompleta.imagen_url }}
+          source={{ uri: recetaCompleta.imagen }}
           style={styles.recipeImage}
         />
 

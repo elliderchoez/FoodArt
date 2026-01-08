@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../services/apiClient';
@@ -26,6 +27,7 @@ const PostItem = ({ post, navigation, colors }) => (
     style={[styles.postCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
     onPress={() => navigation?.navigate('DetalleReceta', { receta: post })}
   >
+    <Image source={{ uri: post.imagen }} style={styles.postImage} />
     <View style={styles.postHeader}>
       <TouchableOpacity
         onPress={() => navigation?.navigate('UsuarioPerfil', { usuarioId: post.user_id })}
@@ -582,6 +584,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+  },
+  postImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 12,
   },
   postHeader: {
     flexDirection: 'row',
