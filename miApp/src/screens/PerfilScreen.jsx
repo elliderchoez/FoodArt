@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import apiClient from '../services/apiClient';
+import { useAppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 
 // Componente para mostrar un usuario en lista
@@ -52,6 +52,7 @@ const RecetaGridItem = ({ receta, onPress }) => (
 );
 
 export const PerfilScreen = ({ navigation }) => {
+  const { logout } = useAppContext();
   const { colors, isDarkMode, toggleTheme } = useTheme();
   const [usuario, setUsuario] = useState(null);
   const [recetas, setRecetas] = useState([]);
@@ -232,7 +233,7 @@ export const PerfilScreen = ({ navigation }) => {
           text: 'Cerrar sesión',
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem('authToken');
+              await logout();
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
