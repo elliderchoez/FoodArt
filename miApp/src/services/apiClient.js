@@ -6,6 +6,7 @@ const API_URL = 'http://192.168.100.11:8000/api';
 
 const apiClient = axios.create({
   baseURL: API_URL,
+  
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json',

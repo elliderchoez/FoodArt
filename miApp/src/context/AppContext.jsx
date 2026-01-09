@@ -10,7 +10,7 @@ export function AppProvider({ children }) {
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  // Método login: guarda usuario y token
+  
   const login = async (userData, tokenValue) => {
     setUser(userData);
     setToken(tokenValue);
@@ -18,7 +18,6 @@ export function AppProvider({ children }) {
     await AsyncStorage.setItem('user', JSON.stringify(userData));
   };
 
-  // Método logout: borra datos y cierra sesión
   const logout = async () => {
     try {
       await apiClient.post('/logout');
@@ -31,10 +30,10 @@ export function AppProvider({ children }) {
     await AsyncStorage.removeItem('user');
   };
 
-  // Toggle tema oscuro/claro
+  
   const toggleTheme = () => setIsDarkTheme((prev) => !prev);
 
-  // Cargar sesión al iniciar app
+  
   useEffect(() => {
     const loadSession = async () => {
       const storedToken = await AsyncStorage.getItem('authToken');

@@ -73,21 +73,22 @@ export const LoginScreen = ({ navigation }) => {
         // Guardar en AppContext
         await login(data.user, data.token);
 
-        // Sincronizar datos del usuario
-        await UsuarioManager.sincronizarDesdeAPI(data.token);
-        await UsuarioManager.obtenerNombre();
+        // Sincronizar datos del usuario (sin esperar)
+        try {
+          await UsuarioManager.sincronizarDesdeAPI(data.token);
+          await UsuarioManager.obtenerNombre();
+        } catch (err) {
+          console.warn('Error sincronizando usuario:', err);
+        }
 
-        // Registrar token de notificaciones (si existe)
+        // Registrar token de notificaciones (sin esperar)
         try {
           const pushToken = await getStoredToken();
           if (pushToken) {
-            await apiClient.post('/notifications/register-token', {
+            apiClient.post('/notifications/register-token', {
               token: pushToken,
               device_name: 'mobile-app',
-            });
-            console.log('✅ Token de notificaciones registrado en el backend');
-          } else {
-            console.warn('⚠️ No hay token de notificaciones (Expo Go limitación)');
+            }).catch(e => console.warn('Notif error:', e));
           }
         } catch (notifError) {
           console.warn('Advertencia registrando token:', notifError.message);
