@@ -24,6 +24,8 @@ class Receta extends Model
         'categoria',
         'likes_count',
         'comentarios_count',
+        'is_blocked',
+        'block_reason',
     ];
 
     protected $casts = [

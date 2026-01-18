@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -14,12 +14,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
+import { AdminService } from '../services/AdminService';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -66,9 +68,12 @@ const ComentarioItem = ({ comentario, colors }) => (
 
 export default function DetalleRecetaScreen({ route, navigation }) {
   const { colors, isDarkMode } = useTheme();
-  const { receta } = route.params || {};
+  const { receta, isAdmin } = route.params || {};
   const [loading, setLoading] = useState(false);
-  const [recetaCompleta, setRecetaCompleta] = useState(receta);
+  const [recetaCompleta, setRecetaCompleta] = useState({
+    ...receta,
+    is_blocked: receta?.is_blocked || false,
+  });
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [comentarios, setComentarios] = useState([]);
@@ -78,6 +83,22 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [token, setToken] = useState(null);
   const [siguiendo, setSiguiendo] = useState(false);
   const [esMiReceta, setEsMiReceta] = useState(false);
+  const [showAdminOptions, setShowAdminOptions] = useState(false);
+  const [deletingReceta, setDeletingReceta] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitulo, setEditTitulo] = useState('');
+  const [editDescripcion, setEditDescripcion] = useState('');
+  const [editIngredientes, setEditIngredientes] = useState('');
+  const [editPasos, setEditPasos] = useState('');
+  const [editTiempoPreparacion, setEditTiempoPreparacion] = useState('');
+  const [editPorciones, setEditPorciones] = useState('');
+  const [editDificultad, setEditDificultad] = useState('medio');
+  const [editCategoria, setEditCategoria] = useState('');
+  const [blockReason, setBlockReason] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [blockModalVisible, setBlockModalVisible] = useState(false);
+  const [blockModalReason, setBlockModalReason] = useState('');
+  const [blockingReceta, setBlockingReceta] = useState(false);
 
   useEffect(() => {
     const inicializar = async () => {
@@ -219,6 +240,158 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     );
   };
 
+  // ===== FUNCIONES DE ADMIN =====
+  const handleDeleteReceta = useCallback(async () => {
+    Alert.alert(
+      'Eliminar Receta',
+      '¿Estás seguro de que deseas eliminar esta receta? Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar' },
+        {
+          text: 'Eliminar',
+          onPress: async () => {
+            try {
+              setDeletingReceta(true);
+              console.log('Eliminando receta:', recetaCompleta.id);
+              await AdminService.deleteReceta(recetaCompleta.id);
+              Alert.alert('Éxito', 'Receta eliminada', [
+                { text: 'OK', onPress: () => navigation.goBack() }
+              ]);
+            } catch (error) {
+              console.error('Error eliminando receta:', error);
+              Alert.alert('Error', 'No se pudo eliminar la receta');
+            } finally {
+              setDeletingReceta(false);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  }, [recetaCompleta.id, navigation]);
+
+  const handleBlockReceta = useCallback(() => {
+    console.log('handleBlockReceta ejecutada - is_blocked:', recetaCompleta.is_blocked);
+    const isBlocked = recetaCompleta.is_blocked;
+    
+    if (isBlocked) {
+      // Si ya está bloqueada, solo desbloquear
+      Alert.alert(
+        'Desbloquear Receta',
+        '¿Desbloquear esta receta?',
+        [
+          { text: 'Cancelar' },
+          {
+            text: 'Desbloquear',
+            onPress: async () => {
+              try {
+                setBlockingReceta(true);
+                console.log('Desbloqueando receta:', recetaCompleta.id);
+                await AdminService.unblockReceta(recetaCompleta.id);
+                setRecetaCompleta({ ...recetaCompleta, is_blocked: false });
+                Alert.alert('Éxito', 'Receta desbloqueada');
+              } catch (error) {
+                console.error('Error desbloqueando receta:', error);
+                Alert.alert('Error', 'No se pudo desbloquear la receta');
+              } finally {
+                setBlockingReceta(false);
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      // Si no está bloqueada, abrir modal para pedir razón
+      console.log('Abriendo modal de bloqueo');
+      setBlockModalReason('');
+      setBlockModalVisible(true);
+    }
+  }, [recetaCompleta.id, recetaCompleta.is_blocked]);
+
+  const confirmBlockReceta = useCallback(async () => {
+    if (!blockModalReason.trim()) {
+      Alert.alert('Error', 'Ingresa una razón para bloquear la receta');
+      return;
+    }
+
+    try {
+      setBlockingReceta(true);
+      console.log('Bloqueando receta:', recetaCompleta.id, 'Razón:', blockModalReason);
+      await AdminService.blockReceta(recetaCompleta.id, blockModalReason);
+      
+      // Actualizar el estado de la receta
+      setRecetaCompleta({ ...recetaCompleta, is_blocked: true });
+      
+      // Cerrar el modal
+      setBlockModalVisible(false);
+      setBlockModalReason('');
+      
+      Alert.alert('Éxito', 'Receta bloqueada correctamente');
+    } catch (error) {
+      console.error('Error bloqueando receta:', error);
+      Alert.alert('Error', 'No se pudo bloquear la receta');
+    } finally {
+      setBlockingReceta(false);
+    }
+  }, [recetaCompleta.id, blockModalReason]);
+
+  const openEditModal = () => {
+    setEditTitulo(recetaCompleta.titulo || '');
+    setEditDescripcion(recetaCompleta.descripcion || '');
+    setEditTiempoPreparacion((recetaCompleta.tiempo_preparacion || '').toString());
+    setEditPorciones((recetaCompleta.porciones || '').toString());
+    setEditDificultad(recetaCompleta.dificultad || 'medio');
+    setEditCategoria(recetaCompleta.categoria || '');
+    setEditIngredientes(Array.isArray(recetaCompleta.ingredientes) 
+      ? recetaCompleta.ingredientes.join('\n') 
+      : typeof recetaCompleta.ingredientes === 'string'
+      ? recetaCompleta.ingredientes
+      : '');
+    setEditPasos(Array.isArray(recetaCompleta.pasos) 
+      ? recetaCompleta.pasos.join('\n') 
+      : typeof recetaCompleta.pasos === 'string'
+      ? recetaCompleta.pasos
+      : '');
+    setShowEditModal(true);
+  };
+
+  const handleEditReceta = async () => {
+    if (!editTitulo.trim() || !editDescripcion.trim()) {
+      Alert.alert('Error', 'Título y descripción son requeridos');
+      return;
+    }
+
+    try {
+      setEditLoading(true);
+      const ingredientesArray = editIngredientes.split('\n').filter(i => i.trim());
+      const pasosArray = editPasos.split('\n').filter(p => p.trim());
+      const tiempoPreparacion = parseInt(editTiempoPreparacion) || null;
+      const porciones = parseInt(editPorciones) || null;
+
+      await AdminService.updateReceta(recetaCompleta.id, {
+        titulo: editTitulo,
+        descripcion: editDescripcion,
+        tiempo_preparacion: tiempoPreparacion,
+        porciones: porciones,
+        dificultad: editDificultad,
+        categoria: editCategoria,
+        ingredientes: JSON.stringify(ingredientesArray),
+        pasos: JSON.stringify(pasosArray),
+      });
+
+      Alert.alert('Éxito', 'Receta actualizada');
+      setShowEditModal(false);
+      
+      // Recargar la receta
+      await cargarDetalleReceta(token);
+    } catch (error) {
+      console.error('Error editando receta:', error);
+      Alert.alert('Error', 'No se pudo actualizar la receta');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const toggleSeguir = async () => {
     if (!token) {
       Alert.alert('Error', 'Debes iniciar sesión');
@@ -280,7 +453,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Imagen */}
         <Image
-          source={{ uri: recetaCompleta.imagen }}
+          source={{ uri: recetaCompleta.imagen || recetaCompleta.imagen_url || 'https://via.placeholder.com/400x300' }}
           style={styles.recipeImage}
         />
 
@@ -346,6 +519,58 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             <MaterialCommunityIcons name="share-variant" size={24} color="#D4AF37" />
           </TouchableOpacity>
         </View>
+
+        {/* Opciones Admin */}
+        {isAdmin && (
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <Text style={[styles.adminTitle, { color: colors.text }]}>Opciones de Admin</Text>
+            <View style={styles.adminButtons}>
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: colors.primary }]}
+                onPress={openEditModal}
+              >
+                <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+                <Text style={styles.adminButtonText}>Editar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: recetaCompleta.is_blocked ? '#4caf50' : '#FFA500' }]}
+                onPress={handleBlockReceta}
+                disabled={blockingReceta}
+              >
+                {blockingReceta ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons 
+                      name={recetaCompleta.is_blocked ? 'lock-open' : 'lock'} 
+                      size={18} 
+                      color="#fff" 
+                    />
+                    <Text style={styles.adminButtonText}>
+                      {recetaCompleta.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: '#FF4757', opacity: deletingReceta ? 0.5 : 1 }]}
+                onPress={handleDeleteReceta}
+                disabled={deletingReceta}
+              >
+                {deletingReceta ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="trash-can" size={18} color="#fff" />
+                    <Text style={styles.adminButtonText}>Eliminar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Rating (estrellas) */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
@@ -489,6 +714,182 @@ export default function DetalleRecetaScreen({ route, navigation }) {
               >
                 <Text style={styles.modalPublishBtnText}>Publicar</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal de Edición */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={() => setShowEditModal(false)}>
+              <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Editar Receta</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+            <Text style={[styles.labelText, { color: colors.text }]}>Título</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Título de la receta"
+              placeholderTextColor={colors.textSecondary}
+              value={editTitulo}
+              onChangeText={setEditTitulo}
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Descripción</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border, minHeight: 80 }]}
+              placeholder="Descripción"
+              placeholderTextColor={colors.textSecondary}
+              value={editDescripcion}
+              onChangeText={setEditDescripcion}
+              multiline
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Tiempo de Preparación (minutos)</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Ej: 30"
+              placeholderTextColor={colors.textSecondary}
+              value={editTiempoPreparacion}
+              onChangeText={setEditTiempoPreparacion}
+              keyboardType="numeric"
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Porciones</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Ej: 4"
+              placeholderTextColor={colors.textSecondary}
+              value={editPorciones}
+              onChangeText={setEditPorciones}
+              keyboardType="numeric"
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Dificultad</Text>
+            <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
+              <Picker
+                selectedValue={editDificultad}
+                onValueChange={setEditDificultad}
+                style={{ color: colors.text }}
+              >
+                <Picker.Item label="Fácil" value="fácil" />
+                <Picker.Item label="Medio" value="medio" />
+                <Picker.Item label="Difícil" value="difícil" />
+              </Picker>
+            </View>
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Categoría</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Ej: Postres"
+              placeholderTextColor={colors.textSecondary}
+              value={editCategoria}
+              onChangeText={setEditCategoria}
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Ingredientes (uno por línea)</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border, minHeight: 100 }]}
+              placeholder="Ej: 2 huevos&#10;1 taza de harina"
+              placeholderTextColor={colors.textSecondary}
+              value={editIngredientes}
+              onChangeText={setEditIngredientes}
+              multiline
+            />
+
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Pasos (uno por línea)</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.text, borderColor: colors.border, minHeight: 100 }]}
+              placeholder="Ej: Mezclar ingredientes&#10;Cocinar a fuego medio"
+              placeholderTextColor={colors.textSecondary}
+              value={editPasos}
+              onChangeText={setEditPasos}
+              multiline
+            />
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setShowEditModal(false)}
+            >
+              <Text style={[styles.modalCancelBtnText, { color: colors.text }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalPublishBtn, { opacity: editLoading ? 0.5 : 1 }]}
+              onPress={handleEditReceta}
+              disabled={editLoading}
+            >
+              {editLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalPublishBtnText}>Guardar</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal para bloquear receta */}
+      <Modal
+        visible={blockModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBlockModalVisible(false)}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <View style={[styles.blockModalContent, { backgroundColor: colors.background }]}>
+              <View style={styles.blockModalHeader}>
+                <Text style={[styles.blockModalTitle, { color: colors.text }]}>Bloquear Receta</Text>
+                <TouchableOpacity onPress={() => setBlockModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.blockModalLabel, { color: colors.text }]}>Razón de bloqueo</Text>
+              <TextInput
+                style={[
+                  styles.blockModalInput,
+                  { borderColor: colors.border, color: colors.text }
+                ]}
+                placeholder="Ingresa la razón del bloqueo..."
+                placeholderTextColor={colors.textSecondary}
+                value={blockModalReason}
+                onChangeText={setBlockModalReason}
+                multiline
+                numberOfLines={4}
+                editable={!blockingReceta}
+              />
+
+              <View style={styles.blockModalButtons}>
+                <TouchableOpacity
+                  style={[styles.blockModalCancelBtn, { opacity: blockingReceta ? 0.5 : 1 }]}
+                  onPress={() => setBlockModalVisible(false)}
+                  disabled={blockingReceta}
+                >
+                  <Text style={styles.blockModalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.blockModalConfirmBtn,
+                    { opacity: blockingReceta || !blockModalReason.trim() ? 0.5 : 1 }
+                  ]}
+                  onPress={confirmBlockReceta}
+                  disabled={blockingReceta || !blockModalReason.trim()}
+                >
+                  {blockingReceta ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.blockModalConfirmText}>Bloquear</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -838,4 +1239,123 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-});
+  adminContainer: {
+    marginHorizontal: 16,
+    marginVertical: 12,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+  },
+  adminTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  adminButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  adminButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    gap: 6,
+  },
+  adminButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  labelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  blockModalContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    maxHeight: '80%',
+  },
+  blockModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  blockModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  blockModalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  blockModalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    marginBottom: 16,
+    minHeight: 100,
+  },
+  blockModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  blockModalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+  },
+  blockModalCancelText: {
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  blockModalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#D4AF37',
+    alignItems: 'center',
+  },
+  blockModalConfirmText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },});

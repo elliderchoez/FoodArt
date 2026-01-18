@@ -71,7 +71,7 @@ export const LoginScreen = ({ navigation }) => {
 
       if (data.token) {
         // Guardar en AppContext
-        await login(data.user, data.token);
+        await login(data.user, data.token, data.isAdmin || false);
 
         // Sincronizar datos del usuario (sin esperar)
         try {
@@ -94,6 +94,7 @@ export const LoginScreen = ({ navigation }) => {
           console.warn('Advertencia registrando token:', notifError.message);
         }
 
+        // Todos van a Home (admin y usuarios normales)
         navigation.replace('Home');
       }
     } catch (error) {

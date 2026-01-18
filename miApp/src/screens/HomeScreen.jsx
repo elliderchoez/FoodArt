@@ -16,20 +16,9 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import { useNotificationCount } from '../context/NotificationContext';
-
-// Componente de Botón de Navegación con Badge
-const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount }) => (
-  <View style={styles.navButtonContainer}>
-    <TouchableOpacity style={styles.navButton} onPress={onPress}>
-      <Icon name={icon} size={24} color={colors.textSecondary} />
-    </TouchableOpacity>
-    {badgeCount > 0 && (
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
-      </View>
-    )}
-  </View>
-);
+import { useAppContext } from '../context/AppContext';
+import { BottomNavBar } from '../components/BottomNavBar';
+import { AdminBottomNavBar } from '../components/AdminBottomNavBar';
 
 const categorias = [
   { id: 1, nombre: 'Todas', emoji: '🍽️', seleccionada: true },
@@ -183,6 +172,7 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
 export const HomeScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
   const { unreadCount } = useNotificationCount();
+  const { isAdmin } = useAppContext();
   const PAGE_SIZE = 10;
   const [categoria, setCategoria] = useState('Todas');
   const [posts, setPosts] = useState([]);
@@ -351,98 +341,84 @@ export const HomeScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>FOOD ART</Text>
-      </View>
-
-      {/* Categorías */}
-      <FlatList
-        data={catList}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <CategoriaItem 
-            categoria={item}
-            colors={colors}
-            onPress={() => seleccionarCategoria(item.nombre)}
-          />
-        )}
-        style={styles.categoriasList}
-        contentContainerStyle={styles.categoriasContainer}
-      />
-
-      <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
-
-      {/* Feed */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#D4AF37" />
+      <View style={styles.contentContainer}>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>FOOD ART</Text>
         </View>
-      ) : postsFiltrados.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas aún</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Las recetas aparecerán aquí</Text>
-        </View>
-      ) : (
+
+        {/* Categorías */}
         <FlatList
-          data={postsFiltrados}
+          data={catList}
+          horizontal
+          showsHorizontalScrollIndicator={false}
           keyExtractor={item => item.id.toString()}
           renderItem={({ item }) => (
-            <PostItem
-              post={item}
-              token={token}
-              navigation={navigation}
+            <CategoriaItem 
+              categoria={item}
               colors={colors}
-              onPress={() => navigation.navigate('DetalleReceta', { receta: item })}
+              onPress={() => seleccionarCategoria(item.nombre)}
             />
           )}
-          style={styles.feedList}
-          contentContainerStyle={styles.feedContainer}
-          showsVerticalScrollIndicator={false}
-          onEndReached={cargarMas}
-          onEndReachedThreshold={0.5}
-          refreshing={refreshing}
-          onRefresh={refrescar}
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={{ paddingVertical: 16 }}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : !hasMore && posts.length > 0 ? (
-              <View style={{ paddingVertical: 18 }}>
-                <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '600' }}>
-                  Ya no hay más recetas
-                </Text>
-              </View>
-            ) : null
-          }
+          style={styles.categoriasList}
+          contentContainerStyle={styles.categoriasContainer}
         />
-      )}
 
-      {/* Bottom Navigation */}
-      <View style={[styles.bottomNav, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Home')}>
-          <Icon name="home" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Buscar')}>
-          <Icon name="magnify" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('CrearReceta')}>
-          <Icon name="plus-circle" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <NavButtonWithBadge 
-          icon="bell-outline" 
-          onPress={() => irA('Alertas')} 
-          colors={colors}
-          badgeCount={unreadCount}
-        />
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Perfil')}>
-          <Icon name="account-circle-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
+
+        {/* Feed */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D4AF37" />
+          </View>
+        ) : postsFiltrados.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
+            <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas aún</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Las recetas aparecerán aquí</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={postsFiltrados}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+              <PostItem
+                post={item}
+                token={token}
+                navigation={navigation}
+                colors={colors}
+                onPress={() => navigation.navigate('DetalleReceta', { receta: item })}
+              />
+            )}
+            style={styles.feedList}
+            contentContainerStyle={styles.feedContainer}
+            showsVerticalScrollIndicator={false}
+            onEndReached={cargarMas}
+            onEndReachedThreshold={0.5}
+            refreshing={refreshing}
+            onRefresh={refrescar}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={{ paddingVertical: 16 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : !hasMore && posts.length > 0 ? (
+                <View style={{ paddingVertical: 18 }}>
+                  <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '600' }}>
+                    Ya no hay más recetas
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        )}
       </View>
+
+      {isAdmin ? (
+        <AdminBottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
+      ) : (
+        <BottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
+      )}
     </SafeAreaView>
   );
 };
@@ -451,6 +427,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  contentContainer: {
+    flex: 1,
   },
   header: {
     height: 50,
@@ -638,42 +617,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginLeft: 6,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    height: 56,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    elevation: 0,
-  },
-  navButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navButtonContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-    textAlign: 'center',
   },
 });

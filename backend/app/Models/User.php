@@ -25,6 +25,14 @@ class User extends Authenticatable
         'descripcion',
         'imagen_perfil',
         'expo_push_token',
+        'role',
+        'is_blocked',
+        'blocked_at',
+        'block_reason',
+        'email_verified',
+        'email_verification_token',
+        'password_reset_token',
+        'password_reset_expires',
     ];
 
     /**
@@ -47,7 +55,21 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_blocked' => 'boolean',
+            'blocked_at' => 'datetime',
+            'email_verified' => 'boolean',
+            'password_reset_expires' => 'datetime',
         ];
+    }
+
+    public function isAdmin()
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isBlocked()
+    {
+        return $this->is_blocked;
     }
 
     /**

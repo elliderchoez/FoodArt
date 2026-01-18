@@ -20,6 +20,9 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
+import { useAppContext } from '../context/AppContext';
+import { BottomNavBar } from '../components/BottomNavBar';
+import { AdminBottomNavBar } from '../components/AdminBottomNavBar';
 
 // Componente de Post/Receta (similar al HomeScreen)
 const PostItem = ({ post, navigation, colors }) => (
@@ -59,6 +62,7 @@ const PostItem = ({ post, navigation, colors }) => (
 
 export const BuscarScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
+  const { isAdmin } = useAppContext();
   const [busqueda, setBusqueda] = useState('');
   const [allRecetas, setAllRecetas] = useState([]);
   const [recetasFiltradas, setRecetasFiltradas] = useState([]);
@@ -493,24 +497,12 @@ export const BuscarScreen = ({ navigation }) => {
           </View>
         </SafeAreaView>
       </Modal>
-      {/* Bottom Navigation */}
-      <View style={[styles.bottomNav, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Home')}>
-          <Icon name="home" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Buscar')}>
-          <Icon name="magnify" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('CrearReceta')}>
-          <Icon name="plus-circle" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Alertas')}>
-          <Icon name="bell-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Perfil')}>
-          <Icon name="account-circle-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
+
+      {isAdmin ? (
+        <AdminBottomNavBar navigation={navigation} currentRoute="Buscar" colors={colors} />
+      ) : (
+        <BottomNavBar navigation={navigation} currentRoute="Buscar" colors={colors} />
+      )}
     </SafeAreaView>
   );
 };
@@ -758,16 +750,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    height: 56,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-  },
-  navButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

@@ -19,6 +19,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import apiClient from '../services/apiClient';
 import { useAppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
+import { BottomNavBar } from '../components/BottomNavBar';
 
 // Componente para mostrar un usuario en lista
 const UsuarioListItem = ({ usuario, navigation, onPress, colors }) => (
@@ -52,7 +53,7 @@ const RecetaGridItem = ({ receta, onPress }) => (
 );
 
 export const PerfilScreen = ({ navigation }) => {
-  const { logout } = useAppContext();
+  const { logout, isAdmin } = useAppContext();
   const { colors, isDarkMode, toggleTheme } = useTheme();
   const [usuario, setUsuario] = useState(null);
   const [recetas, setRecetas] = useState([]);
@@ -561,6 +562,23 @@ export const PerfilScreen = ({ navigation }) => {
 
             <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
+            {isAdmin && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setMostrarMenuPerfil(false);
+                    navigation.navigate('AdminAccess');
+                  }}
+                >
+                  <Icon name="shield-admin" size={22} color="#FF6B6B" />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>Panel Admin</Text>
+                </TouchableOpacity>
+
+                <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+              </>
+            )}
+
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => {
@@ -625,24 +643,7 @@ export const PerfilScreen = ({ navigation }) => {
         </SafeAreaView>
       </Modal>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Home')}>
-          <Icon name="home" size={24} color="#6B7280" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Buscar')}>
-          <Icon name="magnify" size={24} color="#6B7280" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('CrearReceta')}>
-          <Icon name="plus-circle" size={24} color="#6B7280" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Alertas')}>
-          <Icon name="bell-outline" size={24} color="#6B7280" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Perfil')}>
-          <Icon name="account-circle-outline" size={24} color="#D4AF37" />
-        </TouchableOpacity>
-      </View>
+      <BottomNavBar navigation={navigation} currentRoute="Perfil" colors={colors} />
     </SafeAreaView>
   );
 };
@@ -1006,17 +1007,6 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 20,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    height: 56,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 0,
-  },
-  navButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalContainer: {
     flex: 1,

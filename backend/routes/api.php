@@ -7,11 +7,14 @@ use App\Http\Controllers\RecetaController;
 use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\SeguidorController;
 use App\Http\Controllers\RatingController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\UserController;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/forgot-password', [AuthController::class, 'requestPasswordReset']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::post('/upload-image', [AuthController::class, 'uploadImage']);
 
 // Rutas públicas de recetas
@@ -60,5 +63,70 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [AuthController::class, 'getNotifications']);
     Route::put('/notifications/{id}/read', [AuthController::class, 'markNotificationAsRead']);
     Route::delete('/notifications/{id}', [AuthController::class, 'deleteNotification']);
+
+    // ========== RUTAS DE USUARIO ==========
+
+    // Perfil y seguridad
+    Route::post('/user/change-password', [UserController::class, 'changePassword']);
+    Route::post('/user/delete-account', [UserController::class, 'deleteAccount']);
+
+    // Categorías de recetas
+    Route::post('/recetas/{id}/categorizar', [UserController::class, 'saveRecetaInCategory']);
+    Route::get('/user/recetas-categorias', [UserController::class, 'getRecetasCategorias']);
+    Route::put('/receta-categorias/{id}', [UserController::class, 'updateCategoryName']);
+    Route::delete('/receta-categorias/{id}', [UserController::class, 'deleteCategory']);
+
+    // Reseñas
+    Route::post('/recetas/{id}/resenas', [UserController::class, 'crearResena']);
+    Route::delete('/resenas/{id}', [UserController::class, 'deleteResena']);
+
+    // Mensajería
+    Route::post('/mensajes', [UserController::class, 'enviarMensaje']);
+    Route::get('/mensajes/{usuarioId}', [UserController::class, 'getConversacion']);
+    Route::get('/conversaciones', [UserController::class, 'getConversaciones']);
+    Route::get('/mensajes/sin-leer/count', [UserController::class, 'countMensajesSinLeer']);
+
+    // Filtros avanzados
+    Route::get('/recetas/filtrar/avanzado', [UserController::class, 'filtrarRecetas']);
+
+
+    // ========== RUTAS DE ADMIN ==========
+    Route::middleware('admin')->group(function () {
+        // Usuarios
+        Route::get('/admin/usuarios', [AdminController::class, 'getUsuarios']);
+        Route::post('/admin/usuarios', [AdminController::class, 'createUsuario']);
+        Route::put('/admin/usuarios/{id}', [AdminController::class, 'updateUsuario']);
+        Route::post('/admin/usuarios/{id}/block', [AdminController::class, 'blockUsuario']);
+        Route::post('/admin/usuarios/{id}/unblock', [AdminController::class, 'unblockUsuario']);
+        Route::delete('/admin/usuarios/{id}', [AdminController::class, 'deleteUsuario']);
+        Route::post('/admin/usuarios/{id}/reset-password', [AdminController::class, 'resetPassword']);
+
+        // Recetas
+        Route::get('/admin/recetas', [AdminController::class, 'getRecetas']);
+        Route::put('/admin/recetas/{id}', [AdminController::class, 'updateReceta']);
+        Route::post('/admin/recetas/{id}/block', [AdminController::class, 'blockReceta']);
+        Route::post('/admin/recetas/{id}/unblock', [AdminController::class, 'unblockReceta']);
+        Route::delete('/admin/recetas/{id}', [AdminController::class, 'deleteReceta']);
+
+        // Reportes
+        Route::get('/admin/reports', [AdminController::class, 'getReports']);
+        Route::post('/admin/reports', [AdminController::class, 'createReport']);
+        Route::put('/admin/reports/{id}', [AdminController::class, 'resolveReport']);
+
+        // Logs
+        Route::get('/admin/logs', [AdminController::class, 'getLogs']);
+
+        // Parámetros del sistema
+        Route::get('/admin/parameters', [AdminController::class, 'getParameters']);
+        Route::post('/admin/parameters', [AdminController::class, 'createParameter']);
+        Route::put('/admin/parameters/{id}', [AdminController::class, 'updateParameter']);
+
+        // Backups
+        Route::post('/admin/backup/create', [AdminController::class, 'createBackup']);
+        Route::get('/admin/backup/list', [AdminController::class, 'listBackups']);
+
+        // Estadísticas
+        Route::get('/admin/statistics', [AdminController::class, 'getStatistics']);
+    });
 });
 

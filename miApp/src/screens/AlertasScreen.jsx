@@ -15,7 +15,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
+import { useAppContext } from '../context/AppContext';
 import { useNotificationCount } from '../context/NotificationContext';
+import { BottomNavBar } from '../components/BottomNavBar';
+import { AdminBottomNavBar } from '../components/AdminBottomNavBar';
 import {
   getStoredNotifications,
   markNotificationAsRead,
@@ -109,6 +112,7 @@ const AlertItem = ({ alerta, onPress, onDelete, colors }) => {
 
 export const AlertasScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
+  const { isAdmin } = useAppContext();
   const { setUnreadCount: setGlobalUnreadCount } = useNotificationCount();
   const [alertas, setAlertas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -269,35 +273,11 @@ export const AlertasScreen = ({ navigation }) => {
         />
       )}
 
-      {/* Bottom Navigation */}
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            backgroundColor: colors.cardBackground,
-            borderTopColor: colors.border,
-          },
-        ]}
-      >
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Home')}>
-          <Icon name="home" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Buscar')}>
-          <Icon name="magnify" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navButton}
-          onPress={() => irA('CrearReceta')}
-        >
-          <Icon name="plus-circle" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Alertas')}>
-          <Icon name="bell-outline" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => irA('Perfil')}>
-          <Icon name="account-circle-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
+      {isAdmin ? (
+        <AdminBottomNavBar navigation={navigation} currentRoute="Alertas" colors={colors} />
+      ) : (
+        <BottomNavBar navigation={navigation} currentRoute="Alertas" colors={colors} />
+      )}
     </SafeAreaView>
   );
 };
@@ -407,16 +387,5 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    height: 56,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-  },
-  navButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

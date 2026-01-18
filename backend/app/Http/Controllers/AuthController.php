@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -64,6 +65,13 @@ class AuthController extends Controller
             ], 404);
         }
 
+        if ($user->is_blocked) {
+            return response()->json([
+                'message' => 'Tu cuenta ha sido bloqueada',
+                'reason' => $user->block_reason,
+            ], 403);
+        }
+
         if (!Hash::check($validated['password'], $user->password)) {
             return response()->json([
                 'message' => 'Contraseña incorrecta',
@@ -76,6 +84,7 @@ class AuthController extends Controller
             'message' => 'Login exitoso',
             'token' => $token,
             'user' => $user,
+            'isAdmin' => $user->isAdmin(),
         ], 200);
     }
 
@@ -339,4 +348,81 @@ class AuthController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * Solicitar restablecimiento de contraseña
+     */
+    public function requestPasswordReset(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|exists:users',
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            // No revelar si el email existe o no
+            return response()->json([
+                'message' => 'Si el email existe en el sistema, recibirás un enlace de restablecimiento',
+            ], 200);
+        }
+
+        // Generar token
+        $token = \Str::random(60);
+
+        $user->update([
+            'password_reset_token' => hash('sha256', $token),
+            'password_reset_expires' => now()->addHours(1),
+        ]);
+
+        // En una app real, aquí enviarías un email con el token
+        // Por ahora, retornamos el token en la respuesta (solo para desarrollo)
+
+        return response()->json([
+            'message' => 'Se ha enviado un enlace de restablecimiento',
+            'token' => $token, // SOLO PARA DESARROLLO - QUITAR EN PRODUCCIÓN
+        ], 200);
+    }
+
+    /**
+     * Resetear contraseña con token
+     */
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|exists:users',
+            'token' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Email no encontrado',
+            ], 404);
+        }
+
+        // Verificar token
+        if (!$user->password_reset_token ||
+            $user->password_reset_token !== hash('sha256', $validated['token']) ||
+            $user->password_reset_expires < now()) {
+
+            return response()->json([
+                'message' => 'Token inválido o expirado',
+            ], 401);
+        }
+
+        // Actualizar contraseña
+        $user->update([
+            'password' => Hash::make($validated['password']),
+            'password_reset_token' => null,
+            'password_reset_expires' => null,
+        ]);
+
+        return response()->json([
+            'message' => 'Contraseña reseteada exitosamente',
+        ], 200);
+    }
 }
+
