@@ -7,6 +7,7 @@ use App\Models\Receta;
 use App\Models\SystemLog;
 use App\Models\ReportReceta;
 use App\Models\ReportUsuario;
+use App\Models\ReportComentario;
 use App\Models\Notification;
 use App\Models\SystemParameter;
 use Illuminate\Http\Request;
@@ -399,15 +400,23 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'status' => 'required|in:revisado,rechazado,resuelto',
-            'response' => 'required|string|max:1000',
+            'response' => 'nullable|string|max:1000',
             // Compat: block_user (legacy) => bloquear autor de la receta
-            'action' => 'sometimes|in:delete_receta,block_recipe,block_recipe_author,warn_recipe_author,block_user,none',
+            'action' => 'sometimes|in:delete_receta,block_recipe,block_recipe_author,mute_recipe_author_7d,mute_recipe_author_30d,warn_recipe_author,block_user,none',
         ]);
 
         // Validaciones de acciones antes de escribir cambios.
         $action = $validated['action'] ?? 'none';
         $receta = $report->receta;
         $autor = optional($receta)->user;
+
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+        $defaultResponse = $this->buildDefaultModerationMessage('receta', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
 
         if (in_array($action, ['block_recipe', 'delete_receta'], true) && !$receta) {
             return response()->json([
@@ -430,11 +439,34 @@ class AdminController extends Controller
         }
 
         $report->update([
-            'status' => $validated['status'],
-            'admin_response' => $validated['response'],
+            'status' => $status,
+            'admin_response' => $responseText,
             'reviewed_by' => Auth::id(),
             'reviewed_at' => now(),
         ]);
+
+        // Enviar advertencia al autor SIEMPRE que el reporte quede resuelto.
+        // (Independiente de si se bloquea/elimina la receta o se bloquea el autor.)
+        if (($status ?? null) === 'resuelto' && $autor) {
+            $this->notifyUser(
+                $autor,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'recetaId' => $report->receta_id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_autor_receta', 'User', $autor->getKey(), 'Advertencia enviada por reporte (auto)');
+        }
 
         // Ejecutar acción si es necesaria
         if ($action !== 'none') {
@@ -480,20 +512,31 @@ class AdminController extends Controller
                     ]);
                     $this->logAction(Auth::id(), 'bloquear_autor_receta_reporte', 'User', $autor->getKey(), 'Autor bloqueado por reporte');
                 }
+            } elseif ($action === 'mute_recipe_author_7d' || $action === 'mute_recipe_author_30d') {
+                if ($autor) {
+                    $days = $action === 'mute_recipe_author_7d' ? 7 : 30;
+                    $autor->update([
+                        'comment_banned_until' => now()->addDays($days),
+                        'comment_ban_reason' => 'Prohibido comentar por reporte (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'prohibir_comentar_autor_receta', 'User', $autor->getKey(), 'Autor con prohibición de comentar', [
+                        'days' => $days,
+                    ]);
+                }
             }
         }
 
         // Notificar al usuario que reportó
         if ($report->usuario) {
             $tituloReceta = $receta ? ($receta->titulo ?? 'una receta') : 'una receta';
-            $status = $validated['status'];
+            $status = $status;
             $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
 
             $this->notifyUser(
                 $report->usuario,
                 'report_reviewed',
                 '📣 Tu reporte fue revisado',
-                'Tu reporte sobre "' . $tituloReceta . '" fue ' . $statusLabel . '. Respuesta: ' . $validated['response'],
+                'Tu reporte sobre "' . $tituloReceta . '" fue ' . $statusLabel . '. Respuesta: ' . $responseText,
                 $report->receta_id,
                 Auth::id(),
                 [
@@ -535,6 +578,160 @@ class AdminController extends Controller
     }
 
     /**
+     * Obtener reportes de comentarios
+     */
+    public function getCommentReports(Request $request)
+    {
+        $query = ReportComentario::with(['comentario.user', 'receta', 'reportedUser', 'reporter', 'reviewedBy']);
+
+        if ($request->has('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $reports = $query->orderBy('created_at', 'desc')->paginate(15);
+        $reports->getCollection()->transform(function ($report) {
+            $report->type = 'comentario';
+            return $report;
+        });
+
+        return response()->json([
+            'message' => 'Reportes de comentarios obtenidos',
+            'data' => $reports
+        ]);
+    }
+
+    /**
+     * Resolver reporte de comentario
+     */
+    public function resolveCommentReport(Request $request, $reportId)
+    {
+        $report = ReportComentario::with(['comentario.receta', 'comentario.user', 'reportedUser', 'reporter'])->findOrFail($reportId);
+
+        $validated = $request->validate([
+            'status' => 'required|in:revisado,rechazado,resuelto',
+            'response' => 'nullable|string|max:1000',
+            'action' => 'sometimes|in:delete_comentario,block_comment_author,mute_comment_author_7d,mute_comment_author_30d,none',
+        ]);
+
+        $action = $validated['action'] ?? 'none';
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+
+        $defaultResponse = $this->buildDefaultModerationMessage('comentario', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
+
+        $reportedUser = $report->reportedUser;
+        if (in_array($action, ['block_comment_author'], true) && !$reportedUser) {
+            return response()->json([
+                'message' => 'El usuario del comentario no existe.'
+            ], 422);
+        }
+
+        if ($reportedUser && $reportedUser->role === 'admin' && Auth::id() !== $reportedUser->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para moderar esta cuenta.'
+            ], 403);
+        }
+
+        $report->update([
+            'status' => $status,
+            'admin_response' => $responseText,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        // Advertencia automática al autor del comentario cuando queda resuelto.
+        if (($status ?? null) === 'resuelto' && $reportedUser) {
+            $this->notifyUser(
+                $reportedUser,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'comentarioId' => $report->comentario_id,
+                    'recetaId' => $report->receta_id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_autor_comentario', 'User', $reportedUser->getKey(), 'Advertencia enviada por reporte de comentario (auto)');
+        }
+
+        // Ejecutar acción
+        if ($action !== 'none') {
+            if ($action === 'delete_comentario') {
+                $comentario = $report->comentario;
+                if ($comentario) {
+                    $recetaId = $comentario->receta_id;
+                    $comentarioId = $comentario->getKey();
+                    $comentario->delete();
+                    if ($recetaId) {
+                        Receta::where('id', $recetaId)->decrement('comentarios_count');
+                    }
+                    $this->logAction(Auth::id(), 'eliminar_comentario_reporte', 'Comentario', $comentarioId, 'Comentario eliminado por reporte');
+                }
+            } elseif ($action === 'block_comment_author') {
+                if ($reportedUser) {
+                    $reportedUser->update([
+                        'is_blocked' => true,
+                        'blocked_at' => now(),
+                        'block_reason' => 'Bloqueado por reporte de comentario (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'bloquear_autor_comentario_reporte', 'User', $reportedUser->getKey(), 'Autor del comentario bloqueado por reporte');
+                }
+            } elseif ($action === 'mute_comment_author_7d' || $action === 'mute_comment_author_30d') {
+                if ($reportedUser) {
+                    $days = $action === 'mute_comment_author_7d' ? 7 : 30;
+                    $reportedUser->update([
+                        'comment_banned_until' => now()->addDays($days),
+                        'comment_ban_reason' => 'Prohibido comentar por reporte de comentario (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'prohibir_comentar_autor_comentario', 'User', $reportedUser->getKey(), 'Autor del comentario con prohibición de comentar', [
+                        'days' => $days,
+                    ]);
+                }
+            }
+        }
+
+        // Notificar al usuario que reportó
+        if ($report->reporter) {
+            $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
+            $this->notifyUser(
+                $report->reporter,
+                'report_reviewed',
+                '📣 Tu reporte fue revisado',
+                'Tu reporte de un comentario fue ' . $statusLabel . '. Respuesta: ' . $responseText,
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'status' => $status,
+                    'reportId' => $report->id,
+                    'comentarioId' => $report->comentario_id,
+                ]
+            );
+        }
+
+        $this->logAction(Auth::id(), 'resolver_reporte_comentario', 'ReportComentario', $report->id, 'Reporte de comentario resuelto', [
+            'status' => $validated['status'],
+            'action' => $validated['action'] ?? 'none',
+        ]);
+
+        return response()->json([
+            'message' => 'Reporte de comentario resuelto',
+            'data' => $report
+        ]);
+    }
+
+    /**
      * Resolver reporte de usuario
      */
     public function resolveUserReport(Request $request, $reportId)
@@ -543,11 +740,18 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'status' => 'required|in:revisado,rechazado,resuelto',
-            'response' => 'required|string|max:1000',
-            'action' => 'sometimes|in:block_reported_user,warn_reported_user,none',
+            'response' => 'nullable|string|max:1000',
+            'action' => 'sometimes|in:block_reported_user,mute_reported_user_7d,mute_reported_user_30d,warn_reported_user,none',
         ]);
 
         $action = $validated['action'] ?? 'none';
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+        $defaultResponse = $this->buildDefaultModerationMessage('usuario', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
 
         if (in_array($action, ['block_reported_user', 'warn_reported_user'], true)) {
             $user = $report->reportedUser;
@@ -565,11 +769,32 @@ class AdminController extends Controller
         }
 
         $report->update([
-            'status' => $validated['status'],
-            'admin_response' => $validated['response'],
+            'status' => $status,
+            'admin_response' => $responseText,
             'reviewed_by' => Auth::id(),
             'reviewed_at' => now(),
         ]);
+
+        // Enviar advertencia SIEMPRE que el reporte quede resuelto.
+        if (($status ?? null) === 'resuelto' && $report->reportedUser) {
+            $this->notifyUser(
+                $report->reportedUser,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                null,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_usuario_reportado', 'User', $report->reportedUser->getKey(), 'Advertencia enviada por reporte de usuario (auto)');
+        }
 
         if ($action === 'warn_reported_user') {
             $user = $report->reportedUser;
@@ -599,19 +824,31 @@ class AdminController extends Controller
 
                 $this->logAction(Auth::id(), 'bloquear_usuario_reportado', 'User', $user->getKey(), 'Usuario reportado bloqueado');
             }
+        } elseif ($action === 'mute_reported_user_7d' || $action === 'mute_reported_user_30d') {
+            $user = $report->reportedUser;
+            if ($user) {
+                $days = $action === 'mute_reported_user_7d' ? 7 : 30;
+                $user->update([
+                    'comment_banned_until' => now()->addDays($days),
+                    'comment_ban_reason' => 'Prohibido comentar por reporte (moderación)',
+                ]);
+                $this->logAction(Auth::id(), 'prohibir_comentar_usuario_reportado', 'User', $user->getKey(), 'Usuario reportado con prohibición de comentar', [
+                    'days' => $days,
+                ]);
+            }
         }
 
         // Notificar al usuario que reportó
         if ($report->reporter) {
             $reportedName = $report->reportedUser->name ?? 'un usuario';
-            $status = $validated['status'];
+            $status = $status;
             $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
 
             $this->notifyUser(
                 $report->reporter,
                 'report_reviewed',
                 '📣 Tu reporte fue revisado',
-                'Tu reporte sobre "' . $reportedName . '" fue ' . $statusLabel . '. Respuesta: ' . $validated['response'],
+                'Tu reporte sobre "' . $reportedName . '" fue ' . $statusLabel . '. Respuesta: ' . $responseText,
                 null,
                 Auth::id(),
                 [
@@ -630,6 +867,97 @@ class AdminController extends Controller
             'message' => 'Reporte de usuario resuelto',
             'data' => $report
         ]);
+    }
+
+    private function reasonLabel($reason)
+    {
+        switch ($reason) {
+            case 'inapropiado':
+                return 'Contenido inapropiado';
+            case 'spam':
+                return 'Spam';
+            case 'falso':
+                return 'Información falsa';
+            case 'plagios':
+                return 'Plagio';
+            case 'acoso':
+                return 'Acoso';
+            case 'suplantacion':
+                return 'Suplantación';
+            case 'otro':
+            default:
+                return 'Otro';
+        }
+    }
+
+    private function buildDefaultModerationMessage($type, $status, $reasonLabel, $action)
+    {
+        // Mensaje predeterminado para el usuario afectado.
+        // Nota: el "status" se guarda para trazabilidad, pero el mensaje solo se usa como advertencia cuando status=resuelto.
+        $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
+
+        $measure = 'Sin medidas adicionales.';
+
+        if ($type === 'receta') {
+            switch ($action) {
+                case 'delete_receta':
+                    $measure = 'Medida: tu receta fue eliminada.';
+                    break;
+                case 'block_recipe':
+                    $measure = 'Medida: tu receta fue bloqueada.';
+                    break;
+                case 'block_recipe_author':
+                case 'block_user':
+                    $measure = 'Medida: tu cuenta fue bloqueada.';
+                    break;
+                case 'mute_recipe_author_7d':
+                    $measure = 'Medida: no podrás comentar durante 7 días.';
+                    break;
+                case 'mute_recipe_author_30d':
+                    $measure = 'Medida: no podrás comentar durante 30 días.';
+                    break;
+                case 'none':
+                default:
+                    $measure = 'Medida: sin acciones adicionales.';
+            }
+        } else {
+            if ($type === 'comentario') {
+                switch ($action) {
+                    case 'delete_comentario':
+                        $measure = 'Medida: tu comentario fue eliminado.';
+                        break;
+                    case 'block_comment_author':
+                        $measure = 'Medida: tu cuenta fue bloqueada.';
+                        break;
+                    case 'mute_comment_author_7d':
+                        $measure = 'Medida: no podrás comentar durante 7 días.';
+                        break;
+                    case 'mute_comment_author_30d':
+                        $measure = 'Medida: no podrás comentar durante 30 días.';
+                        break;
+                    case 'none':
+                    default:
+                        $measure = 'Medida: sin acciones adicionales.';
+                }
+            } else {
+                switch ($action) {
+                    case 'block_reported_user':
+                        $measure = 'Medida: tu cuenta fue bloqueada.';
+                        break;
+                    case 'mute_reported_user_7d':
+                        $measure = 'Medida: no podrás comentar durante 7 días.';
+                        break;
+                    case 'mute_reported_user_30d':
+                        $measure = 'Medida: no podrás comentar durante 30 días.';
+                        break;
+                    case 'none':
+                    default:
+                        $measure = 'Medida: sin acciones adicionales.';
+                }
+            }
+        }
+
+        return 'Motivo: ' . $reasonLabel . '. Estado: ' . $statusLabel . '. ' . $measure;
     }
 
     /**

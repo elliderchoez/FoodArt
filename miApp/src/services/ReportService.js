@@ -16,6 +16,14 @@ class ReportService {
     });
     return response.data;
   }
+
+  static async reportComentario(comentarioId, reason, description = '') {
+    const response = await apiClient.post(`/reports/comentarios/${comentarioId}`, {
+      reason,
+      description: description?.trim() ? description.trim() : null,
+    });
+    return response.data;
+  }
 }
 
 export { ReportService };

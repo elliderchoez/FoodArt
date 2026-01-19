@@ -46,6 +46,13 @@ class ComentarioController extends Controller
             ]);
 
             $currentUser = $request->user();
+            if ($currentUser && $currentUser->comment_banned_until && $currentUser->comment_banned_until->isFuture()) {
+                $until = $currentUser->comment_banned_until->toDateTimeString();
+                return response()->json([
+                    'message' => 'No puedes comentar temporalmente. Prohibición hasta: ' . $until,
+                ], 403);
+            }
+
             $comentario = Comentario::create([
                 'user_id' => $currentUser->id,
                 'receta_id' => $receta_id,

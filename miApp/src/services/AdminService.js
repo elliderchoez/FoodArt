@@ -114,6 +114,16 @@ class AdminService {
     return response.data;
   }
 
+  static async getCommentReports(page = 1, status = '') {
+    const params = new URLSearchParams({
+      page,
+      ...(status && { status }),
+    });
+
+    const response = await apiClient.get(`/admin/reports/comentarios?${params}`);
+    return response.data;
+  }
+
   static async createReport(data) {
     const response = await apiClient.post('/admin/reports', data);
     return response.data;
@@ -126,6 +136,11 @@ class AdminService {
 
   static async resolveUserReport(reportId, data) {
     const response = await apiClient.put(`/admin/reports/usuarios/${reportId}`, data);
+    return response.data;
+  }
+
+  static async resolveCommentReport(reportId, data) {
+    const response = await apiClient.put(`/admin/reports/comentarios/${reportId}`, data);
     return response.data;
   }
 

@@ -21,18 +21,23 @@ export const AdminReports = ({ navigation }) => {
   const { colors, isDarkMode, toggleTheme } = useTheme();
   const [recipeReports, setRecipeReports] = useState([]);
   const [userReports, setUserReports] = useState([]);
+  const [commentReports, setCommentReports] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const [filter, setFilter] = useState('pendiente'); // 'pendiente', 'resuelto', 'todos'
-  const [reportType, setReportType] = useState('todos'); // 'todos', 'receta', 'usuario'
+  const [filter, setFilter] = useState('todos'); // 'pendiente', 'resuelto', 'todos'
+  const [reportType, setReportType] = useState('todos'); // 'todos', 'receta', 'usuario', 'comentario'
+  const [sortKey, setSortKey] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
   const refreshIntervalRef = useRef(null);
 
   const [resolveStatus, setResolveStatus] = useState('resuelto');
   const [resolveAction, setResolveAction] = useState('none');
   const [adminResponse, setAdminResponse] = useState('');
+  const [adminResponseTouched, setAdminResponseTouched] = useState(false);
+  const [lastAutoResponse, setLastAutoResponse] = useState('');
 
   const getReasonLabel = (reason) => {
     switch (reason) {
@@ -56,7 +61,34 @@ export const AdminReports = ({ navigation }) => {
 
   const getReportTypeLabel = (type) => {
     if (type === 'usuario') return 'Usuario';
+    if (type === 'comentario') return 'Comentario';
     return 'Receta';
+  };
+
+  const buildDefaultModerationMessage = (report, status, action) => {
+    const reasonLabel = getReasonLabel(report?.reason);
+    const statusLabel = status === 'resuelto' ? 'resuelto' : status === 'rechazado' ? 'rechazado' : 'revisado';
+
+    let measure = 'Medida: sin acciones adicionales.';
+
+    if (report?.type === 'usuario') {
+      if (action === 'block_reported_user') measure = 'Medida: tu cuenta fue bloqueada.';
+      else if (action === 'mute_reported_user_7d') measure = 'Medida: no podrás comentar durante 7 días.';
+      else if (action === 'mute_reported_user_30d') measure = 'Medida: no podrás comentar durante 30 días.';
+    } else if (report?.type === 'comentario') {
+      if (action === 'delete_comentario') measure = 'Medida: tu comentario fue eliminado.';
+      else if (action === 'block_comment_author') measure = 'Medida: tu cuenta fue bloqueada.';
+      else if (action === 'mute_comment_author_7d') measure = 'Medida: no podrás comentar durante 7 días.';
+      else if (action === 'mute_comment_author_30d') measure = 'Medida: no podrás comentar durante 30 días.';
+    } else {
+      if (action === 'delete_receta') measure = 'Medida: tu receta fue eliminada.';
+      else if (action === 'block_recipe') measure = 'Medida: tu receta fue bloqueada.';
+      else if (action === 'block_recipe_author') measure = 'Medida: tu cuenta fue bloqueada.';
+      else if (action === 'mute_recipe_author_7d') measure = 'Medida: no podrás comentar durante 7 días.';
+      else if (action === 'mute_recipe_author_30d') measure = 'Medida: no podrás comentar durante 30 días.';
+    }
+
+    return `Motivo: ${reasonLabel}. Estado: ${statusLabel}. ${measure}`;
   };
 
   const confirmAsync = (title, message) => {
@@ -107,16 +139,19 @@ export const AdminReports = ({ navigation }) => {
         setInitialLoading(true);
       }
 
-      const [recetaResp, userResp] = await Promise.all([
+      const [recetaResp, userResp, commentResp] = await Promise.all([
         AdminService.getReports(1, ''),
         AdminService.getUserReports(1, ''),
+        AdminService.getCommentReports(1, ''),
       ]);
 
       const recetaData = recetaResp.data || recetaResp;
       const userData = userResp.data || userResp;
+      const commentData = commentResp.data || commentResp;
 
       const recetaItemsRaw = Array.isArray(recetaData) ? recetaData : recetaData.data || [];
       const userItemsRaw = Array.isArray(userData) ? userData : userData.data || [];
+      const commentItemsRaw = Array.isArray(commentData) ? commentData : commentData.data || [];
 
       const recetaItems = recetaItemsRaw.map((r) => ({
         ...r,
@@ -126,9 +161,14 @@ export const AdminReports = ({ navigation }) => {
         ...r,
         type: r.type || 'usuario',
       }));
+      const commentItems = commentItemsRaw.map((r) => ({
+        ...r,
+        type: r.type || 'comentario',
+      }));
 
       setRecipeReports(recetaItems);
       setUserReports(userItems);
+      setCommentReports(commentItems);
     } catch (error) {
       console.error('Error cargando reportes:', error);
       if (!silent) {
@@ -141,58 +181,164 @@ export const AdminReports = ({ navigation }) => {
   };
 
   const allReports = useMemo(() => {
-    return [...recipeReports, ...userReports].sort(
+    return [...recipeReports, ...userReports, ...commentReports].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  }, [recipeReports, userReports]);
+  }, [recipeReports, userReports, commentReports]);
 
   const visibleReportsBase = useMemo(() => {
     if (reportType === 'receta') return recipeReports;
     if (reportType === 'usuario') return userReports;
+    if (reportType === 'comentario') return commentReports;
     return allReports;
-  }, [reportType, recipeReports, userReports, allReports]);
+  }, [reportType, recipeReports, userReports, commentReports, allReports]);
+
+  const sortedReportsBase = useMemo(() => {
+    const list = Array.isArray(visibleReportsBase) ? [...visibleReportsBase] : [];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    const asString = (value) => (value ?? '').toString().toLowerCase();
+    const asDate = (value) => {
+      const d = value ? new Date(value) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+    };
+
+    const getAuthorName = (r) => {
+      if (r?.type === 'usuario') return r?.reportedUser?.name || '';
+      if (r?.type === 'comentario') return r?.comentario?.user?.name || r?.reportedUser?.name || '';
+      return r?.receta?.user?.name || '';
+    };
+
+    const getReporterName = (r) => {
+      if (r?.type === 'usuario') return r?.reporter?.name || '';
+      if (r?.type === 'comentario') return r?.reporter?.name || '';
+      return r?.usuario?.name || '';
+    };
+
+    list.sort((a, b) => {
+      if (sortKey === 'author') {
+        return asString(getAuthorName(a)).localeCompare(asString(getAuthorName(b))) * dir;
+      }
+
+      if (sortKey === 'reporter') {
+        return asString(getReporterName(a)).localeCompare(asString(getReporterName(b))) * dir;
+      }
+
+      if (sortKey === 'status') {
+        return asString(a?.status).localeCompare(asString(b?.status)) * dir;
+      }
+
+      if (sortKey === 'reason') {
+        return asString(getReasonLabel(a?.reason)).localeCompare(asString(getReasonLabel(b?.reason))) * dir;
+      }
+
+      // created_at (default)
+      return (asDate(a?.created_at) - asDate(b?.created_at)) * dir;
+    });
+
+    return list;
+  }, [visibleReportsBase, sortKey, sortDirection]);
 
   const filteredReports = useMemo(() => {
     if (filter === 'pendiente') {
-      return visibleReportsBase.filter(r => r.status === 'pendiente');
+      return sortedReportsBase.filter(r => r.status === 'pendiente');
     } else if (filter === 'resuelto') {
-      return visibleReportsBase.filter(r => r.status === 'resuelto');
+      return sortedReportsBase.filter(r => r.status === 'resuelto');
     }
-    return visibleReportsBase;
-  }, [filter, visibleReportsBase]);
+    return sortedReportsBase;
+  }, [filter, sortedReportsBase]);
+
+  const sortKeyLabel = useMemo(() => {
+    switch (sortKey) {
+      case 'author':
+        return 'Autor';
+      case 'reporter':
+        return 'Reportó';
+      case 'status':
+        return 'Estado';
+      case 'reason':
+        return 'Razón';
+      case 'created_at':
+      default:
+        return 'Fecha';
+    }
+  }, [sortKey]);
+
+  const cycleSortKey = () => {
+    setSortKey((prev) => {
+      if (prev === 'created_at') return 'author';
+      if (prev === 'author') return 'reporter';
+      if (prev === 'reporter') return 'status';
+      if (prev === 'status') return 'reason';
+      return 'created_at';
+    });
+  };
+
+  const toggleSortDirection = () => {
+    setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
 
   const getAvailableActions = (report) => {
     if (!report) return [];
     if (report.type === 'usuario') {
       return [
         { value: 'none', label: 'Sin acción' },
-        { value: 'warn_reported_user', label: 'Advertir usuario reportado' },
         { value: 'block_reported_user', label: 'Bloquear usuario reportado' },
+        { value: 'mute_reported_user_7d', label: 'Prohibir comentar 7 días' },
+        { value: 'mute_reported_user_30d', label: 'Prohibir comentar 30 días' },
+      ];
+    }
+    if (report.type === 'comentario') {
+      return [
+        { value: 'none', label: 'Sin acción' },
+        { value: 'delete_comentario', label: 'Eliminar comentario' },
+        { value: 'block_comment_author', label: 'Bloquear autor del comentario' },
+        { value: 'mute_comment_author_7d', label: 'Prohibir comentar 7 días' },
+        { value: 'mute_comment_author_30d', label: 'Prohibir comentar 30 días' },
       ];
     }
     return [
       { value: 'none', label: 'Sin acción' },
-      { value: 'warn_recipe_author', label: 'Advertir autor de la receta' },
       { value: 'block_recipe', label: 'Bloquear receta' },
       { value: 'delete_receta', label: 'Eliminar receta' },
       { value: 'block_recipe_author', label: 'Bloquear autor de la receta' },
+      { value: 'mute_recipe_author_7d', label: 'Prohibir comentar 7 días' },
+      { value: 'mute_recipe_author_30d', label: 'Prohibir comentar 30 días' },
     ];
   };
 
   const initResolveForm = (report) => {
     setResolveStatus('resuelto');
-    setAdminResponse('');
     const actions = getAvailableActions(report);
-    setResolveAction(actions[0]?.value || 'none');
+    const initialAction = actions[0]?.value || 'none';
+    setResolveAction(initialAction);
+    const auto = buildDefaultModerationMessage(report, 'resuelto', initialAction);
+    setAdminResponse(auto);
+    setLastAutoResponse(auto);
+    setAdminResponseTouched(false);
   };
+
+  useEffect(() => {
+    if (!showModal || !selectedReport) return;
+    // Mantener el mensaje predeterminado sincronizado con estado/acción
+    // mientras el admin no lo haya reemplazado por un texto propio.
+    const auto = buildDefaultModerationMessage(selectedReport, resolveStatus, resolveAction);
+    const current = (adminResponse || '').trim();
+
+    const shouldAutoUpdate =
+      !adminResponseTouched ||
+      current === '' ||
+      adminResponse === lastAutoResponse;
+
+    setLastAutoResponse(auto);
+    if (shouldAutoUpdate) {
+      setAdminResponse(auto);
+    }
+  }, [showModal, selectedReport, resolveStatus, resolveAction, adminResponseTouched, adminResponse, lastAutoResponse]);
 
   const submitResolve = async () => {
     if (!selectedReport) return;
     const trimmedResponse = (adminResponse || '').trim();
-    if (!trimmedResponse) {
-      Alert.alert('Falta respuesta', 'Escribe una respuesta o nota del admin.');
-      return;
-    }
 
     const confirm = await confirmAsync(
       'Confirmar resolución',
@@ -210,6 +356,8 @@ export const AdminReports = ({ navigation }) => {
 
       if (selectedReport.type === 'usuario') {
         await AdminService.resolveUserReport(selectedReport.id, payload);
+      } else if (selectedReport.type === 'comentario') {
+        await AdminService.resolveCommentReport(selectedReport.id, payload);
       } else {
         await AdminService.resolveReport(selectedReport.id, payload);
       }
@@ -274,6 +422,10 @@ export const AdminReports = ({ navigation }) => {
           <Text style={[styles.reportTitle, { color: colors.text }]} numberOfLines={2}>
             {item.type === 'usuario'
               ? (item.reportedUser?.name || 'Usuario reportado')
+              : item.type === 'comentario'
+              ? (item.comentario?.contenido
+                ? `Comentario: ${(item.comentario.contenido || '').slice(0, 60)}${(item.comentario.contenido || '').length > 60 ? '…' : ''}`
+                : (item.receta?.titulo || 'Comentario'))
               : (item.receta?.titulo || 'Receta desconocida')}
           </Text>
         </View>
@@ -292,6 +444,8 @@ export const AdminReports = ({ navigation }) => {
 
       <Text style={[styles.reporterText, { color: colors.textSecondary }]}>
         Reportado por: {item.type === 'usuario'
+          ? (item.reporter?.name || 'Usuario')
+          : item.type === 'comentario'
           ? (item.reporter?.name || 'Usuario')
           : (item.usuario?.name || 'Usuario')}
       </Text>
@@ -315,7 +469,7 @@ export const AdminReports = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  if (initialLoading && recipeReports.length === 0 && userReports.length === 0) {
+  if (initialLoading && recipeReports.length === 0 && userReports.length === 0 && commentReports.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -414,69 +568,153 @@ export const AdminReports = ({ navigation }) => {
             Usuarios
           </Text>
         </TouchableOpacity>
-      </View>
 
-      {/* Status filter */}
-      <View style={[styles.statsContainer, { paddingTop: 0 }]}>
         <TouchableOpacity
           style={[
             styles.statBox,
             {
               backgroundColor: colors.card,
-              borderColor: filter === 'pendiente' ? colors.primary : colors.border,
-              borderWidth: filter === 'pendiente' ? 2 : 1,
+              borderColor: reportType === 'comentario' ? colors.primary : colors.border,
+              borderWidth: reportType === 'comentario' ? 2 : 1,
+            },
+          ]}
+          onPress={() => setReportType('comentario')}
+        >
+          <Icon name="comment-alert" size={24} color={colors.primary} />
+          <Text style={[styles.statValue, { color: colors.text }]}>
+            {commentReports.length}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+            Comentarios
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filtro de estado (estilo AdminUsuarios) */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[
+            styles.filterBtn,
+            {
+              backgroundColor:
+                filter === 'todos'
+                  ? colors.primary
+                  : (colors.cardBackground || colors.card),
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={() => setFilter('todos')}
+        >
+          <Text
+            style={[
+              styles.filterBtnText,
+              { color: filter === 'todos' ? '#fff' : colors.text },
+            ]}
+          >
+            Todos
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterBtn,
+            {
+              backgroundColor:
+                filter === 'pendiente'
+                  ? colors.primary
+                  : (colors.cardBackground || colors.card),
+              borderColor: colors.border,
             },
           ]}
           onPress={() => setFilter('pendiente')}
         >
-          <Icon name="clock" size={24} color="#ff9800" />
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {visibleReportsBase.filter(r => r.status === 'pendiente').length}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+          <Icon
+            name="clock"
+            size={16}
+            color={filter === 'pendiente' ? '#fff' : colors.text}
+            style={{ marginRight: 4 }}
+          />
+          <Text
+            style={[
+              styles.filterBtnText,
+              { color: filter === 'pendiente' ? '#fff' : colors.text },
+            ]}
+          >
             Pendientes
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
-            styles.statBox,
+            styles.filterBtn,
             {
-              backgroundColor: colors.card,
-              borderColor: filter === 'resuelto' ? colors.primary : colors.border,
-              borderWidth: filter === 'resuelto' ? 2 : 1,
+              backgroundColor:
+                filter === 'resuelto'
+                  ? colors.primary
+                  : (colors.cardBackground || colors.card),
+              borderColor: colors.border,
             },
           ]}
           onPress={() => setFilter('resuelto')}
         >
-          <Icon name="check-circle" size={24} color="#4caf50" />
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {visibleReportsBase.filter(r => r.status === 'resuelto').length}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+          <Icon
+            name="check-circle"
+            size={16}
+            color={filter === 'resuelto' ? '#fff' : colors.text}
+            style={{ marginRight: 4 }}
+          />
+          <Text
+            style={[
+              styles.filterBtnText,
+              { color: filter === 'resuelto' ? '#fff' : colors.text },
+            ]}
+          >
             Resueltos
           </Text>
         </TouchableOpacity>
+      </View>
 
-        <TouchableOpacity
-          style={[
-            styles.statBox,
-            {
-              backgroundColor: colors.card,
-              borderColor: filter === 'todos' ? colors.primary : colors.border,
-              borderWidth: filter === 'todos' ? 2 : 1,
-            },
-          ]}
-          onPress={() => setFilter('todos')}
-        >
-          <Icon name="filter-variant" size={24} color={colors.primary} />
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {visibleReportsBase.length}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-            Todo estado
-          </Text>
-        </TouchableOpacity>
+      {/* Meta + orden (estilo AdminUsuarios) */}
+      <View style={styles.listMetaRow}>
+        <Text style={[styles.countText, { color: colors.textSecondary }]}>
+          {`Mostrando: ${filteredReports.length}`}
+        </Text>
+        <View style={styles.sortControls}>
+          <TouchableOpacity
+            style={[
+              styles.sortButton,
+              {
+                backgroundColor: (colors.cardBackground || colors.card),
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={cycleSortKey}
+            activeOpacity={0.85}
+          >
+            <Icon name="filter-variant" size={18} color={colors.text} />
+            <Text style={[styles.sortButtonText, { color: colors.text }]} numberOfLines={1}>
+              {sortKeyLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.directionButton,
+              {
+                backgroundColor: (colors.cardBackground || colors.card),
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={toggleSortDirection}
+            activeOpacity={0.85}
+          >
+            <Icon
+              name={sortDirection === 'asc' ? 'arrow-down' : 'arrow-up'}
+              size={18}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Reports List */}
@@ -495,9 +733,10 @@ export const AdminReports = ({ navigation }) => {
         <FlatList
           data={filteredReports}
           renderItem={renderReportItem}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={(item) => `${item.type || 'reporte'}-${item.id}`}
           contentContainerStyle={styles.listContent}
-          scrollEnabled={false}
+          style={{ flex: 1 }}
+          scrollEnabled
         />
       )}
 
@@ -532,8 +771,8 @@ export const AdminReports = ({ navigation }) => {
                 </Text>
               </View>
 
-              {/* Receta Reportada */}
-              {selectedReport.type !== 'usuario' ? (
+              {/* Contenido reportado */}
+              {selectedReport.type === 'receta' ? (
               <View style={[styles.infoSection, { backgroundColor: colors.card }]}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
                   Receta Reportada
@@ -570,7 +809,7 @@ export const AdminReports = ({ navigation }) => {
                   </Text>
                 </TouchableOpacity>
               </View>
-              ) : (
+              ) : selectedReport.type === 'usuario' ? (
               <View style={[styles.infoSection, { backgroundColor: colors.card }]}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
                   Usuario Reportado
@@ -590,6 +829,42 @@ export const AdminReports = ({ navigation }) => {
                   </Text>
                 </View>
               </View>
+              ) : (
+              <View style={[styles.infoSection, { backgroundColor: colors.card }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Comentario Reportado</Text>
+
+                <View style={styles.infoRow}>
+                  <Icon name="comment" size={18} color={colors.primary} />
+                  <Text style={[styles.infoLabel, { color: colors.text }]} numberOfLines={3}>
+                    {selectedReport.comentario?.contenido || '—'}
+                  </Text>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <Icon name="account" size={18} color={colors.primary} />
+                  <Text style={[styles.infoLabel, { color: colors.text }]}>Autor: {selectedReport.comentario?.user?.name || selectedReport.reportedUser?.name || '—'}</Text>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <Icon name="chef-hat" size={18} color={colors.primary} />
+                  <Text style={[styles.infoLabel, { color: colors.text }]}>Receta: {selectedReport.receta?.titulo || '—'}</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.viewRecetaButton, { borderColor: colors.primary }]}
+                  onPress={() => {
+                    setShowModal(false);
+                    navigation.navigate('DetalleReceta', {
+                      recetaId: selectedReport.receta_id,
+                      receta: selectedReport.receta,
+                      isAdmin: true,
+                    });
+                  }}
+                >
+                  <Icon name="eye" size={16} color={colors.primary} />
+                  <Text style={[styles.viewRecetaText, { color: colors.primary }]}>Ver Receta</Text>
+                </TouchableOpacity>
+              </View>
               )}
 
               {/* Reportador */}
@@ -603,6 +878,8 @@ export const AdminReports = ({ navigation }) => {
                   <Text style={[styles.infoLabel, { color: colors.text }]}>
                     {selectedReport.type === 'usuario'
                       ? (selectedReport.reporter?.name || 'Usuario')
+                      : selectedReport.type === 'comentario'
+                      ? (selectedReport.reporter?.name || 'Usuario')
                       : (selectedReport.usuario?.name || 'Usuario')}
                   </Text>
                 </View>
@@ -611,6 +888,8 @@ export const AdminReports = ({ navigation }) => {
                   <Icon name="email" size={18} color={colors.primary} />
                   <Text style={[styles.infoLabel, { color: colors.text }]}>
                     {selectedReport.type === 'usuario'
+                      ? (selectedReport.reporter?.email || '—')
+                      : selectedReport.type === 'comentario'
                       ? (selectedReport.reporter?.email || '—')
                       : (selectedReport.usuario?.email || '—')}
                   </Text>
@@ -725,11 +1004,14 @@ export const AdminReports = ({ navigation }) => {
                       ))}
                     </View>
 
-                    <Text style={[styles.smallLabel, { color: colors.textSecondary, marginTop: 10 }]}>Respuesta del admin</Text>
+                    <Text style={[styles.smallLabel, { color: colors.textSecondary, marginTop: 10 }]}>Mensaje de moderación</Text>
                     <TextInput
                       value={adminResponse}
-                      onChangeText={setAdminResponse}
-                      placeholder="Ej: Revisado, se aplicó moderación..."
+                      onChangeText={(t) => {
+                        setAdminResponseTouched(true);
+                        setAdminResponse(t);
+                      }}
+                      placeholder="Ej: Se revisó el reporte. Evita este comportamiento en el futuro..."
                       placeholderTextColor={colors.textSecondary}
                       multiline
                       style={[styles.responseInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
@@ -778,6 +1060,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 8,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterBtnText: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  listMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  sortControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxWidth: 190,
+  },
+  sortButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  directionButton: {
+    width: 40,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statBox: {
     flex: 1,
