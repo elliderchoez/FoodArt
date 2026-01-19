@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -22,6 +22,7 @@ import StarRating from '../components/StarRating';
 export const AdminRecetas = ({ navigation }) => {
   const { colors } = useTheme();
   const [recetas, setRecetas] = useState([]);
+  const [totalRecetas, setTotalRecetas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filteredRecetas, setFilteredRecetas] = useState([]);
@@ -30,6 +31,8 @@ export const AdminRecetas = ({ navigation }) => {
   const [page, setPage] = useState(1);
   const [filterType, setFilterType] = useState('todas'); // 'todas', 'bloqueadas'
   const [hasMore, setHasMore] = useState(true);
+  const [sortKey, setSortKey] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   useEffect(() => {
     setPage(1);
@@ -43,12 +46,86 @@ export const AdminRecetas = ({ navigation }) => {
     filterRecetas();
   }, [search, recetas, filterType]);
 
+  const sortedRecetas = useMemo(() => {
+    const list = Array.isArray(filteredRecetas) ? [...filteredRecetas] : [];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    const asString = (value) => (value ?? '').toString().toLowerCase();
+    const asDate = (value) => {
+      const d = value ? new Date(value) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+    };
+    const asNumber = (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    list.sort((a, b) => {
+      if (sortKey === 'titulo') {
+        return asString(a?.titulo).localeCompare(asString(b?.titulo)) * dir;
+      }
+
+      if (sortKey === 'autor') {
+        return asString(a?.user?.name).localeCompare(asString(b?.user?.name)) * dir;
+      }
+
+      if (sortKey === 'likes') {
+        const diff = asNumber(a?.likes_count) - asNumber(b?.likes_count);
+        if (diff !== 0) return diff * dir;
+        return asString(a?.titulo).localeCompare(asString(b?.titulo)) * dir;
+      }
+
+      if (sortKey === 'comentarios') {
+        const diff = asNumber(a?.comentarios_count) - asNumber(b?.comentarios_count);
+        if (diff !== 0) return diff * dir;
+        return asString(a?.titulo).localeCompare(asString(b?.titulo)) * dir;
+      }
+
+      // created_at (default)
+      return (asDate(a?.created_at) - asDate(b?.created_at)) * dir;
+    });
+
+    return list;
+  }, [filteredRecetas, sortKey, sortDirection]);
+
+  const sortKeyLabel = useMemo(() => {
+    switch (sortKey) {
+      case 'titulo':
+        return 'Título';
+      case 'autor':
+        return 'Autor';
+      case 'likes':
+        return 'Más likes';
+      case 'comentarios':
+        return 'Más comentarios';
+      case 'created_at':
+      default:
+        return 'Tiempo';
+    }
+  }, [sortKey]);
+
+  const cycleSortKey = useCallback(() => {
+    setSortKey((prev) => {
+      if (prev === 'created_at') return 'titulo';
+      if (prev === 'titulo') return 'autor';
+      if (prev === 'autor') return 'likes';
+      if (prev === 'likes') return 'comentarios';
+      return 'created_at';
+    });
+  }, []);
+
+  const toggleSortDirection = useCallback(() => {
+    setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  }, []);
+
   const refreshRecetas = async () => {
     try {
       const blocked = filterType === 'bloqueadas' ? true : (filterType === 'todas' ? false : null);
       const response = await AdminService.getRecetas(1, '', blocked);
       const recetasData = response.data || response;
       const items = Array.isArray(recetasData) ? recetasData : recetasData.data || [];
+
+      setTotalRecetas(typeof recetasData?.total === 'number' ? recetasData.total : null);
       
       // Recargar la lista completa del servidor para sincronizar cambios de bloqueo
       setRecetas(items);
@@ -65,6 +142,8 @@ export const AdminRecetas = ({ navigation }) => {
       const response = await AdminService.getRecetas(page, search, blocked);
       const recetasData = response.data || response;
       const items = Array.isArray(recetasData) ? recetasData : recetasData.data || [];
+
+      setTotalRecetas(typeof recetasData?.total === 'number' ? recetasData.total : null);
       
       if (page === 1) {
         setRecetas(items);
@@ -214,23 +293,6 @@ export const AdminRecetas = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-        <Icon name="magnify" size={20} color={colors.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Buscar por título o autor..."
-          placeholderTextColor={colors.textSecondary}
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Icon name="close" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* Filtros */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
@@ -287,10 +349,57 @@ export const AdminRecetas = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.cardBackground }]}>
+        <Icon name="magnify" size={20} color={colors.textSecondary} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Buscar por título o autor..."
+          placeholderTextColor={colors.textSecondary}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Icon name="close" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.metaRow}>
+        <Text style={[styles.countText, { color: colors.textSecondary }]}>
+          {typeof totalRecetas === 'number'
+            ? `Total: ${totalRecetas} • Mostrando: ${sortedRecetas.length}`
+            : `Mostrando: ${sortedRecetas.length}`}
+        </Text>
+        <View style={styles.sortControls}>
+          <TouchableOpacity
+            style={[styles.sortButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+            onPress={cycleSortKey}
+            activeOpacity={0.85}
+          >
+            <Icon name="filter-variant" size={18} color={colors.text} />
+            <Text style={[styles.sortButtonText, { color: colors.text }]} numberOfLines={1}>
+              {sortKeyLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.directionButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+            onPress={toggleSortDirection}
+            activeOpacity={0.85}
+          >
+            <Icon
+              name={sortDirection === 'asc' ? 'arrow-down' : 'arrow-up'}
+              size={18}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Recetas List */}
-      {filteredRecetas.length === 0 ? (
+      {sortedRecetas.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="chef-hat" size={64} color={colors.textSecondary} />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -299,7 +408,7 @@ export const AdminRecetas = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={filteredRecetas}
+          data={sortedRecetas}
           renderItem={renderRecetaItem}
           keyExtractor={item => item.id.toString()}
           contentContainerStyle={styles.listContent}
@@ -340,8 +449,9 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    marginTop: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
     paddingHorizontal: 12,
     borderRadius: 8,
   },
@@ -351,9 +461,49 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     fontSize: 14,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  sortControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxWidth: 190,
+  },
+  sortButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  directionButton: {
+    width: 40,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filterContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
   },

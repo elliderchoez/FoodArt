@@ -78,10 +78,16 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin modifique cuentas admin de terceros.
+        if ($usuario->role === 'admin' && auth()->id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para modificar esta cuenta.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,' . $userId,
-            'role' => 'sometimes|in:usuario,admin',
             'descripcion' => 'sometimes|string',
         ]);
 
@@ -109,6 +115,13 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin bloquee cuentas admin de terceros.
+        if ($usuario->role === 'admin' && auth()->id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para bloquear esta cuenta.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'reason' => 'required|string|max:500',
         ]);
@@ -134,6 +147,13 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin desbloquee cuentas admin de terceros.
+        if ($usuario->role === 'admin' && auth()->id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para desbloquear esta cuenta.'
+            ], 403);
+        }
+
         $usuario->update([
             'is_blocked' => false,
             'blocked_at' => null,
@@ -154,6 +174,21 @@ class AdminController extends Controller
     public function deleteUsuario($userId)
     {
         $usuario = User::findOrFail($userId);
+
+        // Seguridad: evitar que un admin elimine cuentas admin de terceros.
+        if ($usuario->role === 'admin' && auth()->id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para eliminar esta cuenta.'
+            ], 403);
+        }
+
+        // Evitar auto-eliminación accidental.
+        if (auth()->id() === $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No puedes eliminar tu propia cuenta.'
+            ], 422);
+        }
+
         $email = $usuario->email;
 
         $this->logAction(auth()->id(), 'eliminar_usuario', 'User', $usuario->id, "Usuario eliminado: {$email}");
@@ -171,6 +206,13 @@ class AdminController extends Controller
     public function resetPassword(Request $request, $userId)
     {
         $usuario = User::findOrFail($userId);
+
+        // Seguridad: evitar que un admin resetee la contraseña de cuentas admin de terceros.
+        if ($usuario->role === 'admin' && auth()->id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para resetear la contraseña de esta cuenta.'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'password' => 'required|string|min:8',
