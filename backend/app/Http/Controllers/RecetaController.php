@@ -79,7 +79,7 @@ class RecetaController extends Controller
                 'dificultad' => 'required|in:Fácil,Media,Difícil',
                 'ingredientes' => 'required|array',
                 'pasos' => 'required|array',
-                'categoria' => 'nullable|string|max:100',
+                'tipo_dieta' => 'nullable|in:vegana,vegetariana,carnes,gym,mixta,bajar_peso',
             ]);
 
             $receta = Receta::create([
@@ -92,7 +92,7 @@ class RecetaController extends Controller
                 'dificultad' => $validated['dificultad'],
                 'ingredientes' => $validated['ingredientes'],
                 'pasos' => $validated['pasos'],
-                'categoria' => $validated['categoria'],
+                'tipo_dieta' => $validated['tipo_dieta'] ?? 'mixta',
             ]);
 
             return response()->json([

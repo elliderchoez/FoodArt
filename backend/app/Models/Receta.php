@@ -22,6 +22,7 @@ class Receta extends Model
         'ingredientes',
         'pasos',
         'categoria',
+        'tipo_dieta',
         'likes_count',
         'comentarios_count',
         'is_blocked',

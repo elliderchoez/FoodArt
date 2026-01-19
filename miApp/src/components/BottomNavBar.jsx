@@ -1,10 +1,37 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 import { useNotificationCount } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 
-const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount, isActive }) => (
-  <View style={styles.navButtonContainer}>
+const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount, isActive }) => {
+  const safeColors = colors || { primary: '#D4AF37', textSecondary: '#999' };
+  return (
+    <View style={styles.navButtonContainer}>
+      <TouchableOpacity 
+        style={styles.navButton} 
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        <Icon 
+          name={icon} 
+          size={24} 
+          color={isActive ? safeColors.primary : safeColors.textSecondary} 
+        />
+      </TouchableOpacity>
+      {badgeCount > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const NavButton = ({ icon, onPress, colors, isActive }) => {
+  const safeColors = colors || { primary: '#D4AF37', textSecondary: '#999' };
+  return (
     <TouchableOpacity 
       style={styles.navButton} 
       onPress={onPress}
@@ -13,33 +40,17 @@ const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount, isActive }) => 
       <Icon 
         name={icon} 
         size={24} 
-        color={isActive ? colors.primary : colors.textSecondary} 
+        color={isActive ? safeColors.primary : safeColors.textSecondary} 
       />
     </TouchableOpacity>
-    {badgeCount > 0 && (
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
-      </View>
-    )}
-  </View>
-);
+  );
+};
 
-const NavButton = ({ icon, onPress, colors, isActive }) => (
-  <TouchableOpacity 
-    style={styles.navButton} 
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <Icon 
-      name={icon} 
-      size={24} 
-      color={isActive ? colors.primary : colors.textSecondary} 
-    />
-  </TouchableOpacity>
-);
-
-export const BottomNavBar = ({ navigation, currentRoute, colors }) => {
+export const BottomNavBar = ({ navigation: navigationProp, currentRoute, colors: propsColors }) => {
+  const navigation = useNavigation();
   const { notificationCount } = useNotificationCount();
+  const { colors: themeColors } = useTheme();
+  const colors = propsColors || themeColors;
 
   const handleNavigation = (routeName) => {
     if (currentRoute !== routeName) {
@@ -73,6 +84,18 @@ export const BottomNavBar = ({ navigation, currentRoute, colors }) => {
         colors={colors}
         badgeCount={notificationCount}
         isActive={currentRoute === 'Alertas'}
+      />
+      <NavButton
+        icon="message-outline"
+        onPress={() => handleNavigation('Mensajes')}
+        colors={colors}
+        isActive={currentRoute === 'Mensajes'}
+      />
+      <NavButton
+        icon="calendar-outline"
+        onPress={() => handleNavigation('PlanComidas')}
+        colors={colors}
+        isActive={currentRoute === 'PlanComidas'}
       />
       <NavButton
         icon="account-outline"

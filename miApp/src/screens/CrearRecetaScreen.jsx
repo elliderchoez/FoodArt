@@ -25,6 +25,7 @@ export default function CrearRecetaScreen({ navigation }) {
   const [tiempo, setTiempo] = useState('');
   const [porciones, setPorciones] = useState('');
   const [dificultad, setDificultad] = useState('Fácil');
+  const [tipoDieta, setTipoDieta] = useState('mixta');
   const [ingredientes, setIngredientes] = useState('');
   const [pasos, setPasos] = useState('');
   const [imagenUri, setImagenUri] = useState(null);
@@ -173,7 +174,7 @@ export default function CrearRecetaScreen({ navigation }) {
         dificultad: dificultad,
         ingredientes: ingredientesArray,
         pasos: pasosArray,
-        categoria: 'General',
+        tipo_dieta: tipoDieta,
       };
 
       console.log('Datos de receta a enviar:', JSON.stringify(datosReceta, null, 2));
@@ -311,6 +312,25 @@ export default function CrearRecetaScreen({ navigation }) {
               <Picker.Item label="Fácil" value="Fácil" />
               <Picker.Item label="Media" value="Media" />
               <Picker.Item label="Difícil" value="Difícil" />
+            </Picker>
+          </View>
+        </View>
+
+        {/* Tipo de Dieta */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Categoría / Tipo de Dieta</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={tipoDieta}
+              onValueChange={setTipoDieta}
+              style={styles.picker}
+            >
+              <Picker.Item label="Mixta" value="mixta" />
+              <Picker.Item label="Vegana" value="vegana" />
+              <Picker.Item label="Vegetariana" value="vegetariana" />
+              <Picker.Item label="Carnes" value="carnes" />
+              <Picker.Item label="Gym" value="gym" />
+              <Picker.Item label="Bajar de Peso" value="bajar_peso" />
             </Picker>
           </View>
         </View>

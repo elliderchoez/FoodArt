@@ -9,6 +9,9 @@ use App\Http\Controllers\SeguidorController;
 use App\Http\Controllers\RatingController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\MensajeController;
+use App\Http\Controllers\MealPlanController;
+use App\Http\Controllers\ShoppingListController;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
@@ -81,10 +84,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/resenas/{id}', [UserController::class, 'deleteResena']);
 
     // Mensajería
-    Route::post('/mensajes', [UserController::class, 'enviarMensaje']);
-    Route::get('/mensajes/{usuarioId}', [UserController::class, 'getConversacion']);
-    Route::get('/conversaciones', [UserController::class, 'getConversaciones']);
-    Route::get('/mensajes/sin-leer/count', [UserController::class, 'countMensajesSinLeer']);
+    Route::get('/mensajes/conversaciones', [MensajeController::class, 'conversaciones']);
+    Route::get('/mensajes/{usuarioId}', [MensajeController::class, 'obtenerMensajes']);
+    Route::post('/mensajes/{usuarioId}/enviar', [MensajeController::class, 'enviarMensaje']);
+    Route::post('/mensajes/{usuarioId}/marcar-leidos', [MensajeController::class, 'marcarLeidos']);
+
+    // Planes de Comidas
+    Route::get('/meal-plans', [MealPlanController::class, 'index']);
+    Route::post('/meal-plans', [MealPlanController::class, 'store']);
+    Route::get('/meal-plans/{mealPlan}', [MealPlanController::class, 'show']);
+    Route::put('/meal-plans/{mealPlan}', [MealPlanController::class, 'update']);
+    Route::delete('/meal-plans/{mealPlan}', [MealPlanController::class, 'destroy']);
+    Route::post('/meal-plans/{mealPlan}/recetas', [MealPlanController::class, 'agregarReceta']);
+    Route::delete('/meal-plans/{mealPlan}/items/{item}', [MealPlanController::class, 'removerReceta']);
+    Route::post('/meal-plans/{mealPlan}/generar-lista', [MealPlanController::class, 'generarListaCompras']);
+
+    // Listas de Compras
+    Route::get('/shopping-lists', [ShoppingListController::class, 'index']);
+    Route::post('/shopping-lists', [ShoppingListController::class, 'store']);
+    Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show']);
+    Route::put('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'update']);
+    Route::delete('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'destroy']);
+    Route::post('/shopping-lists/{shoppingList}/items', [ShoppingListController::class, 'agregarItem']);
+    Route::put('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListController::class, 'actualizarItem']);
+    Route::post('/shopping-lists/{shoppingList}/items/{item}/marcar-comprado', [ShoppingListController::class, 'marcarComprado']);
+    Route::post('/shopping-lists/{shoppingList}/items/{item}/desmarcar', [ShoppingListController::class, 'desmarcarComprado']);
+    Route::delete('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListController::class, 'eliminarItem']);
 
     // Filtros avanzados
     Route::get('/recetas/filtrar/avanzado', [UserController::class, 'filtrarRecetas']);

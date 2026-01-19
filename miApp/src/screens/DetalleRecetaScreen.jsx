@@ -22,6 +22,7 @@ import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
 import { AdminService } from '../services/AdminService';
+import { SharingService } from '../services/SharingService';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -68,7 +69,13 @@ const ComentarioItem = ({ comentario, colors }) => (
 
 export default function DetalleRecetaScreen({ route, navigation }) {
   const { colors, isDarkMode } = useTheme();
-  const { receta, isAdmin } = route.params || {};
+  const { receta, recetaId, isAdmin } = route.params || {};
+  
+  // Logging para debugging
+  console.log('DetalleRecetaScreen - route.params:', route.params);
+  console.log('DetalleRecetaScreen - recetaId extraído:', recetaId);
+  console.log('DetalleRecetaScreen - receta extraída:', receta);
+  
   const [loading, setLoading] = useState(false);
   const [recetaCompleta, setRecetaCompleta] = useState({
     ...receta,
@@ -99,25 +106,36 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [blockModalReason, setBlockModalReason] = useState('');
   const [blockingReceta, setBlockingReceta] = useState(false);
+  const [mostrarModalCompartir, setMostrarModalCompartir] = useState(false);
 
   useEffect(() => {
     const inicializar = async () => {
       const tk = await AsyncStorage.getItem('authToken');
       setToken(tk);
       
-      // Obtener usuario actual para saber si es su receta
-      if (tk) {
-        try {
-          const { data: userData } = await apiClient.get(`/user`);
-          setEsMiReceta(userData.id === receta.user_id);
-        } catch (error) {
-          console.error('Error obteniendo usuario:', error);
-        }
-      }
+      console.log('DetalleRecetaScreen inicializando - recetaId:', recetaId, 'receta:', receta?.id);
       
-      // Ahora cargar receta con el token disponible
-      await cargarDetalleReceta(tk);
-      cargarComentarios();
+      // Si viene solo recetaId, cargar directamente
+      if (recetaId && !receta) {
+        console.log('Cargando con recetaId:', recetaId);
+        await cargarDetalleReceta(tk, recetaId);
+        await cargarComentarios(recetaId);
+      } else if (receta) {
+        console.log('Cargando con receta.id:', receta.id);
+        // Obtener usuario actual para saber si es su receta
+        if (tk) {
+          try {
+            const { data: userData } = await apiClient.get(`/user`);
+            setEsMiReceta(userData.id === receta.user_id);
+          } catch (error) {
+            console.error('Error obteniendo usuario:', error);
+          }
+        }
+        
+        // Ahora cargar receta con el token disponible
+        await cargarDetalleReceta(tk, receta.id);
+        await cargarComentarios(receta.id);
+      }
     };
     inicializar();
   }, []);
@@ -128,9 +146,18 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     return tk;
   };
 
-  const cargarDetalleReceta = async (tk = null) => {
+  const cargarDetalleReceta = async (tk = null, id = null) => {
     try {
-      const { data } = await apiClient.get(`/recetas/${receta.id}`);
+      const recetaId = id || receta?.id;
+      console.log('cargarDetalleReceta - id pasado:', id, ', receta?.id:', receta?.id, ', recetaId final:', recetaId);
+      
+      if (!recetaId) {
+        console.error('No hay ID de receta para cargar');
+        Alert.alert('Error', 'No se pudo cargar la receta');
+        return;
+      }
+      
+      const { data } = await apiClient.get(`/recetas/${recetaId}`);
       // Hacer merge con los datos existentes para preservar la imagen original
       setRecetaCompleta(prev => ({
         ...prev,
@@ -145,15 +172,26 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       console.log('user_liked:', data.user_liked, 'user_saved:', data.user_saved);
     } catch (error) {
       console.error('Error cargando detalle:', error);
+      Alert.alert('Error', 'No se pudo cargar la receta');
     }
   };
 
-  const cargarComentarios = async () => {
+  const cargarComentarios = async (id = null) => {
     try {
-      const { data } = await apiClient.get(`/comentarios/${receta.id}`);
+      const recetaId = id || receta?.id || recetaCompleta?.id;
+      console.log('cargarComentarios - id pasado:', id, ', receta?.id:', receta?.id, ', recetaCompleta?.id:', recetaCompleta?.id, ', recetaId final:', recetaId);
+      
+      if (!recetaId) {
+        console.warn('No hay ID de receta para cargar comentarios');
+        return;
+      }
+      
+      const { data } = await apiClient.get(`/comentarios/${recetaId}`);
+      console.log('Comentarios cargados:', data);
       setComentarios(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
-      console.error('Error cargando comentarios:', error);
+      console.error('Error cargando comentarios:', error.response?.status, error.message, error);
+      setComentarios([]);
     }
   };
 
@@ -230,14 +268,32 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   };
 
   const compartirReceta = () => {
-    Alert.alert(
-      'Compartir',
-      `${recetaCompleta?.titulo}\n\n${recetaCompleta?.descripcion}`,
-      [
-        { text: 'Copiar', onPress: () => Alert.alert('Copiado', 'Receta copiada al portapapeles') },
-        { text: 'Cancelar' },
-      ]
-    );
+    setMostrarModalCompartir(true);
+  };
+
+  const handleCompartirOpcion = async (opcion) => {
+    setMostrarModalCompartir(false);
+    try {
+      switch (opcion) {
+        case 'whatsapp':
+          await SharingService.compartirWhatsApp(recetaCompleta);
+          break;
+        case 'facebook':
+          await SharingService.compartirFacebook(recetaCompleta);
+          break;
+        case 'instagram':
+          await SharingService.compartirInstagram(recetaCompleta);
+          break;
+        case 'correo':
+          await SharingService.compartirCorreo(recetaCompleta);
+          break;
+        case 'nativo':
+          await SharingService.compartirReceta(recetaCompleta);
+          break;
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message || 'No se pudo completar la acción');
+    }
   };
 
   // ===== FUNCIONES DE ADMIN =====
@@ -421,6 +477,18 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     navigation.navigate('UsuarioPerfil', { usuarioId: receta.user_id });
   };
 
+  const iniciarChat = () => {
+    if (!recetaCompleta.user) {
+      Alert.alert('Error', 'No se puede contactar con el autor de esta receta');
+      return;
+    }
+    navigation.navigate('Chat', {
+      usuarioId: recetaCompleta.user.id,
+      usuarioNombre: recetaCompleta.user.name,
+      usuarioImagen: recetaCompleta.user.imagen_perfil,
+    });
+  };
+
   if (!recetaCompleta) {
     return (
       <SafeAreaView style={styles.container}>
@@ -443,7 +511,12 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity 
+          onPress={() => {
+            console.log('Back button pressed');
+            navigation.goBack();
+          }}
+        >
           <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{recetaCompleta.titulo}</Text>
@@ -471,17 +544,26 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             <Text style={[styles.userDate, { color: colors.textSecondary }]}>Receta</Text>
           </View>
           {!esMiReceta && (
-            <TouchableOpacity
-              style={[styles.followButton, siguiendo && styles.followButtonActive]}
-              onPress={toggleSeguir}
-            >
-              <Text style={[
-                styles.followButtonText,
-                siguiendo && styles.followButtonTextActive,
-              ]}>
-                {siguiendo ? 'Siguiendo' : 'Seguir'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.userButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.followButton, siguiendo && styles.followButtonActive]}
+                onPress={toggleSeguir}
+              >
+                <Text style={[
+                  styles.followButtonText,
+                  siguiendo && styles.followButtonTextActive,
+                ]}>
+                  {siguiendo ? 'Siguiendo' : 'Seguir'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.contactButton}
+                onPress={iniciarChat}
+              >
+                <MaterialCommunityIcons name="message-text-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.contactButtonText}>Contactar</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </TouchableOpacity>
 
@@ -574,7 +656,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
         {/* Rating (estrellas) */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
-          <StarRating recetaId={recetaCompleta.id} />
+          {recetaCompleta.id ? (
+            <StarRating recetaId={recetaCompleta.id} />
+          ) : (
+            <ActivityIndicator size="small" color="#D4AF37" />
+          )}
         </View>
 
         {/* Info rápida */}
@@ -595,6 +681,12 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             <MaterialCommunityIcons name="fire" size={24} color="#2196F3" />
             <Text style={[styles.infoValue, { color: colors.text }]}>{recetaCompleta.dificultad}</Text>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Dificultad</Text>
+          </View>
+
+          <View style={styles.infoBox}>
+            <MaterialCommunityIcons name="leaf" size={24} color="#4CAF50" />
+            <Text style={[styles.infoValue, { color: colors.text }]}>{recetaCompleta.tipo_dieta}</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Tipo Dieta</Text>
           </View>
         </View>
 
@@ -894,6 +986,77 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Modal Compartir Receta */}
+      <Modal
+        visible={mostrarModalCompartir}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMostrarModalCompartir(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={[styles.shareModalContent, { backgroundColor: colors.background }]}>
+            <View style={styles.shareModalHeader}>
+              <Text style={[styles.shareModalTitle, { color: colors.text }]}>Compartir Receta</Text>
+              <TouchableOpacity onPress={() => setMostrarModalCompartir(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.shareOptionsContainer}>
+              <TouchableOpacity
+                style={styles.shareOption}
+                onPress={() => handleCompartirOpcion('whatsapp')}
+              >
+                <View style={[styles.shareIconContainer, { backgroundColor: '#25D366' }]}>
+                  <MaterialCommunityIcons name="whatsapp" size={28} color="#fff" />
+                </View>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>WhatsApp</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shareOption}
+                onPress={() => handleCompartirOpcion('facebook')}
+              >
+                <View style={[styles.shareIconContainer, { backgroundColor: '#1877F2' }]}>
+                  <MaterialCommunityIcons name="facebook" size={28} color="#fff" />
+                </View>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>Facebook</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shareOption}
+                onPress={() => handleCompartirOpcion('instagram')}
+              >
+                <View style={[styles.shareIconContainer, { backgroundColor: '#E4405F' }]}>
+                  <MaterialCommunityIcons name="instagram" size={28} color="#fff" />
+                </View>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>Instagram</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shareOption}
+                onPress={() => handleCompartirOpcion('correo')}
+              >
+                <View style={[styles.shareIconContainer, { backgroundColor: '#EA4335' }]}>
+                  <MaterialCommunityIcons name="email-outline" size={28} color="#fff" />
+                </View>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>Correo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shareOption}
+                onPress={() => handleCompartirOpcion('nativo')}
+              >
+                <View style={[styles.shareIconContainer, { backgroundColor: '#D4AF37' }]}>
+                  <MaterialCommunityIcons name="share-variant" size={28} color="#fff" />
+                </View>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>Más opciones</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -974,6 +1137,24 @@ const styles = StyleSheet.create({
   },
   followButtonTextActive: {
     color: '#D4AF37',
+  },
+  userButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  contactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+    gap: 6,
+  },
+  contactButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -1358,4 +1539,47 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  shareModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 30,
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  shareModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  shareOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    gap: 20,
+    justifyContent: 'space-around',
+  },
+  shareOption: {
+    alignItems: 'center',
+    width: '30%',
+  },
+  shareIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  shareOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },});

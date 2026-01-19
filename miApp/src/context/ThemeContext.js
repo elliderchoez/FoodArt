@@ -84,7 +84,22 @@ export const ThemeProvider = ({ children }) => {
 export const useTheme = () => {
   const context = React.useContext(ThemeContext);
   if (!context) {
-    throw new Error('useTheme debe usarse dentro de ThemeProvider');
+    // Devolver tema por defecto en lugar de lanzar error
+    return {
+      isDarkMode: false,
+      colors: {
+        background: '#FFFFFF',
+        surface: '#F5F5F5',
+        card: '#FFFFFF',
+        cardBackground: '#FFFFFF',
+        text: '#000000',
+        textSecondary: '#999999',
+        border: '#E0E0E0',
+        primary: '#D4AF37',
+        accent: '#6366F1',
+      },
+      toggleTheme: () => {},
+    };
   }
   return context;
 };

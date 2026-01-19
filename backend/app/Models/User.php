@@ -79,4 +79,20 @@ class User extends Authenticatable
     {
         return $this->hasMany(Receta::class);
     }
+
+    /**
+     * Planes de comidas del usuario
+     */
+    public function mealPlans()
+    {
+        return $this->hasMany(MealPlan::class);
+    }
+
+    /**
+     * Listas de compras del usuario
+     */
+    public function shoppingLists()
+    {
+        return $this->hasMany(ShoppingList::class);
+    }
 }

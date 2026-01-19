@@ -12,6 +12,10 @@ import { EditarPerfilScreen } from '../screens/EditarPerfilScreen';
 import { UsuarioPerfilScreen } from '../screens/UsuarioPerfilScreen';
 import CrearRecetaScreen from '../screens/CrearRecetaScreen';
 import DetalleRecetaScreen from '../screens/DetalleRecetaScreen';
+import { MensajesScreen } from '../screens/MensajesScreen';
+import { ChatScreen } from '../screens/ChatScreen';
+import { PlanComidasScreen } from '../screens/PlanComidasScreen';
+import { ListadoComprasScreen } from '../screens/ListadoComprasScreen';
 import { AdminDashboard } from '../screens/AdminDashboard';
 import { AdminUsuarios } from '../screens/AdminUsuarios';
 import { AdminRecetas } from '../screens/AdminRecetas';
@@ -49,6 +53,10 @@ export const AppNavigator = () => {
         <Stack.Screen name="UsuarioPerfil" component={UsuarioPerfilScreen} />
         <Stack.Screen name="CrearReceta" component={CrearRecetaScreen} />
         <Stack.Screen name="DetalleReceta" component={DetalleRecetaScreen} />
+        <Stack.Screen name="Mensajes" component={MensajesScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="PlanComidas" component={PlanComidasScreen} />
+        <Stack.Screen name="ListadoCompras" component={ListadoComprasScreen} />
         
         {/* Admin Screens */}
         <Stack.Screen name="AdminAccess" component={AdminAccessScreen} />

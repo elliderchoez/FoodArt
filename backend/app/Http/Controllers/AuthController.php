@@ -183,16 +183,29 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Invalid file'], 400);
             }
 
-            // Guardar en public/uploads para acceso directo
+            // Crear directorio si no existe
+            if (!is_dir(public_path('uploads'))) {
+                mkdir(public_path('uploads'), 0755, true);
+            }
+
+            // Generar nombre único
             $fileName = 'receta_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('uploads'), $fileName);
+            $filePath = public_path('uploads/' . $fileName);
 
-            $fullUrl = url('/uploads/' . $fileName);
+            // Usar copy en lugar de move para evitar problemas con el sistema de archivos
+            if (copy($file->getPathname(), $filePath)) {
+                chmod($filePath, 0644);
+                $fullUrl = url('/uploads/' . $fileName);
 
-            return response()->json([
-                'url' => $fullUrl,
-                'message' => 'Image uploaded successfully',
-            ], 200);
+                return response()->json([
+                    'url' => $fullUrl,
+                    'message' => 'Image uploaded successfully',
+                ], 200);
+            } else {
+                return response()->json([
+                    'message' => 'Error al copiar el archivo',
+                ], 400);
+            }
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error uploading image: ' . $e->getMessage(),
