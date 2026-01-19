@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -42,14 +43,24 @@ export const AdminDashboard = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
+    const doLogout = async () => {
+      await logout();
+      navigation.replace('Login');
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('¿Deseas cerrar sesión?');
+      if (ok) {
+        await doLogout();
+      }
+      return;
+    }
+
     Alert.alert('Cerrar sesión', '¿Deseas cerrar sesión?', [
       { text: 'Cancelar', onPress: () => {} },
       {
         text: 'Cerrar',
-        onPress: async () => {
-          await logout();
-          navigation.replace('Login');
-        },
+        onPress: doLogout,
       },
     ]);
   };

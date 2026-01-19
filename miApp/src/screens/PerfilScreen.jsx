@@ -12,6 +12,7 @@ import {
   TextInput,
   Modal,
   Switch,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -169,32 +170,38 @@ export const PerfilScreen = ({ navigation }) => {
   };
 
   const cerrarSesion = async () => {
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        {
-          text: 'Cancelar',
-          onPress: () => {},
-          style: 'cancel',
-        },
-        {
-          text: 'Cerrar sesión',
-          onPress: async () => {
-            try {
-              await logout();
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              Alert.alert('Error', 'Error al cerrar sesión');
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    const doLogout = async () => {
+      try {
+        await logout();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      } catch (error) {
+        Alert.alert('Error', 'Error al cerrar sesión');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('¿Estás seguro de que quieres cerrar sesión?');
+      if (ok) {
+        await doLogout();
+      }
+      return;
+    }
+
+    Alert.alert('Cerrar sesión', '¿Estás seguro de que quieres cerrar sesión?', [
+      {
+        text: 'Cancelar',
+        onPress: () => {},
+        style: 'cancel',
+      },
+      {
+        text: 'Cerrar sesión',
+        onPress: doLogout,
+        style: 'destructive',
+      },
+    ]);
   };
 
   const guardarDescripcion = async () => {
