@@ -16,6 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
+import { ReportModal } from '../components/ReportModal';
+import { ReportService } from '../services/ReportService';
 
 // Componente para mostrar un usuario en lista
 const UsuarioListItem = ({ usuario, onPress, colors }) => (
@@ -49,6 +51,9 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [loadingLista, setLoadingLista] = useState(false);
   const [profileImageLoading, setProfileImageLoading] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
 
   useEffect(() => {
     const inicializar = async () => {
@@ -68,6 +73,16 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
     };
 
     inicializar();
+  }, [usuarioId]);
+
+  useEffect(() => {
+    if (!usuarioId) return;
+    const key = `reported:user:${usuarioId}`;
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (v === '1') setHasReported(true);
+      })
+      .catch(() => {});
   }, [usuarioId]);
 
   const cargarPerfilUsuario = async (tk) => {
@@ -134,6 +149,58 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('Error:', error);
       Alert.alert('Error', error.response?.data?.message || 'Ocurrió un error');
+    }
+  };
+
+  const userReportReasons = [
+    { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Perfil o mensajes ofensivos.' },
+    { key: 'spam', label: 'Spam', help: 'Publicidad o actividad sospechosa.' },
+    { key: 'acoso', label: 'Acoso', help: 'Comportamiento abusivo o intimidación.' },
+    { key: 'suplantacion', label: 'Suplantación', help: 'Se hace pasar por otra persona.' },
+    { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+  ];
+
+  const openReportUser = () => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    if (esMiPerfil) {
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const submitUserReport = async ({ reason, description }) => {
+    const key = usuarioId ? `reported:user:${usuarioId}` : null;
+
+    try {
+      setReporting(true);
+      await ReportService.reportUsuario(usuarioId, reason, description);
+      setHasReported(true);
+      if (key) {
+        await AsyncStorage.setItem(key, '1');
+      }
+      setShowReportModal(false);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 409) {
+        setHasReported(true);
+        if (key) {
+          try {
+            await AsyncStorage.setItem(key, '1');
+          } catch {}
+        }
+        setShowReportModal(false);
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -214,8 +281,27 @@ export const UsuarioPerfilScreen = ({ route, navigation }) => {
           <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Perfil</Text>
-        <View style={{ width: 24 }} />
+        {!esMiPerfil ? (
+          <TouchableOpacity onPress={openReportUser} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon
+              name={hasReported ? 'flag' : 'flag-outline'}
+              size={22}
+              color={hasReported ? colors.error : colors.text}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Reportar usuario"
+        reasons={userReportReasons}
+        submitting={reporting}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitUserReport}
+      />
 
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}

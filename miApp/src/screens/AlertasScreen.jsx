@@ -165,6 +165,10 @@ export const AlertasScreen = ({ navigation }) => {
         // Si es like/comentario de una receta, mostrar detalles
         navigation.navigate('DetalleReceta', { id: alerta.data.recipeId });
       }
+
+      if ((alerta.data?.type === 'report_reviewed' || alerta.data?.type === 'warning') && alerta.data?.recipeId) {
+        navigation.navigate('DetalleReceta', { id: alerta.data.recipeId });
+      }
       
       if ((alerta.data?.type === 'like' || alerta.data?.type === 'comment') && alerta.data?.userId) {
         // Ir al perfil de quien dio like/comentó

@@ -16,7 +16,7 @@ import { AdminService } from '../services/AdminService';
 import { useTheme } from '../context/ThemeContext';
 
 export const AdminLogs = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState(null);
@@ -152,9 +152,18 @@ export const AdminLogs = ({ navigation }) => {
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Logs del Sistema</Text>
-        <TouchableOpacity onPress={() => loadLogs()}>
-          <Icon name="refresh" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => loadLogs()} style={{ marginLeft: 14 }}>
+            <Icon name="refresh" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filters */}

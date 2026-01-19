@@ -23,6 +23,8 @@ import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
 import { AdminService } from '../services/AdminService';
 import { SharingService } from '../services/SharingService';
+import { ReportModal } from '../components/ReportModal';
+import { ReportService } from '../services/ReportService';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -90,6 +92,9 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [token, setToken] = useState(null);
   const [siguiendo, setSiguiendo] = useState(false);
   const [esMiReceta, setEsMiReceta] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
   const [showAdminOptions, setShowAdminOptions] = useState(false);
   const [deletingReceta, setDeletingReceta] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -139,6 +144,69 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     };
     inicializar();
   }, []);
+
+  useEffect(() => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    if (!id) return;
+
+    const key = `reported:receta:${id}`;
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (v === '1') setHasReported(true);
+      })
+      .catch(() => {});
+  }, [recetaCompleta?.id, receta?.id, recetaId]);
+
+  const recetaReportReasons = [
+    { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Lenguaje ofensivo, violencia, etc.' },
+    { key: 'spam', label: 'Spam', help: 'Publicidad o contenido repetitivo.' },
+    { key: 'falso', label: 'Información falsa', help: 'Datos engañosos o peligrosos.' },
+    { key: 'plagios', label: 'Plagio', help: 'Copia sin atribución.' },
+    { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+  ];
+
+  const openReport = () => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const submitRecetaReport = async ({ reason, description }) => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    const key = id ? `reported:receta:${id}` : null;
+
+    try {
+      setReporting(true);
+      await ReportService.reportReceta(id, reason, description);
+      setHasReported(true);
+      if (key) {
+        await AsyncStorage.setItem(key, '1');
+      }
+      setShowReportModal(false);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      // Si el backend responde que ya existe, también lo marcamos como reportado.
+      const status = error?.response?.status;
+      if (status === 409) {
+        setHasReported(true);
+        if (key) {
+          try {
+            await AsyncStorage.setItem(key, '1');
+          } catch {}
+        }
+        setShowReportModal(false);
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setReporting(false);
+    }
+  };
 
   const obtenerToken = async () => {
     const tk = await AsyncStorage.getItem('authToken');
@@ -520,8 +588,27 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{recetaCompleta.titulo}</Text>
-        <View style={{ width: 28 }} />
+        {!esMiReceta && !isAdmin ? (
+          <TouchableOpacity onPress={openReport} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons
+              name={hasReported ? 'flag' : 'flag-outline'}
+              size={26}
+              color={hasReported ? colors.error : colors.text}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 28 }} />
+        )}
       </View>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Reportar receta"
+        reasons={recetaReportReasons}
+        submitting={reporting}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitRecetaReport}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Imagen */}

@@ -20,7 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
 
 export const AdminRecetas = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const [recetas, setRecetas] = useState([]);
   const [totalRecetas, setTotalRecetas] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -288,9 +288,18 @@ export const AdminRecetas = ({ navigation }) => {
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Gestión de Recetas</Text>
-        <TouchableOpacity onPress={refreshRecetas}>
-          <Icon name="refresh" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={refreshRecetas} style={{ marginLeft: 14 }}>
+            <Icon name="refresh" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filtros */}

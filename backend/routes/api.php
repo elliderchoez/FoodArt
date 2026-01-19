@@ -12,6 +12,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\ShoppingListController;
+use App\Http\Controllers\ReportController;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
@@ -114,6 +115,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Filtros avanzados
     Route::get('/recetas/filtrar/avanzado', [UserController::class, 'filtrarRecetas']);
 
+    // ========== REPORTES (USUARIOS) ==========
+    Route::post('/reports/recetas/{recetaId}', [ReportController::class, 'reportReceta']);
+    Route::post('/reports/usuarios/{userId}', [ReportController::class, 'reportUsuario']);
+
 
     // ========== RUTAS DE ADMIN ==========
     Route::middleware('admin')->group(function () {
@@ -135,8 +140,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Reportes
         Route::get('/admin/reports', [AdminController::class, 'getReports']);
+        Route::get('/admin/reports/usuarios', [AdminController::class, 'getUserReports']);
         Route::post('/admin/reports', [AdminController::class, 'createReport']);
         Route::put('/admin/reports/{id}', [AdminController::class, 'resolveReport']);
+        Route::put('/admin/reports/usuarios/{id}', [AdminController::class, 'resolveUserReport']);
 
         // Logs
         Route::get('/admin/logs', [AdminController::class, 'getLogs']);

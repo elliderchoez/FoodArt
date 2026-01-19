@@ -20,7 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAppContext } from '../context/AppContext';
 
 export const AdminUsuarios = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const { user: currentUser } = useAppContext();
   const [usuarios, setUsuarios] = useState([]);
   const [totalUsuarios, setTotalUsuarios] = useState(null);
@@ -383,9 +383,18 @@ export const AdminUsuarios = ({ navigation, route }) => {
         <Text style={[styles.headerTitle, { color: '#fff' }]}>
           Gestionar Usuarios
         </Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AdminDashboard')}>
-          <Icon name="home" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('AdminDashboard')} style={{ marginLeft: 14 }}>
+            <Icon name="home" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filtros */}
