@@ -17,7 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { Picker } from '@react-native-picker/picker';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import { useAppContext } from '../context/AppContext';
@@ -364,8 +363,8 @@ export const BuscarScreen = ({ navigation }) => {
       ) : recetasFiltradas.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
-          <Text style={styles.emptyText}>Busca recetas deliciosas</Text>
-          <Text style={styles.emptySubtext}>Escribe el nombre de una receta</Text>
+          <Text style={[styles.emptyText, { color: colors.text }]}>Busca recetas deliciosas</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Escribe el nombre de una receta</Text>
         </View>
       ) : (
         <FlatList
@@ -383,15 +382,18 @@ export const BuscarScreen = ({ navigation }) => {
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowFiltroModal(false)}
-        onShow={() => StatusBar.setBarStyle('dark-content', true)}
+        onShow={() => StatusBar.setBarStyle(isDarkMode ? 'light-content' : 'dark-content', true)}
       >
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtrar recetas</Text>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Filtrar recetas</Text>
               <TouchableOpacity onPress={() => setShowFiltroModal(false)}>
-                <Icon name="close" size={24} color="#1F2937" />
+                <Icon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -402,26 +404,44 @@ export const BuscarScreen = ({ navigation }) => {
             >
               {/* Ordenamiento */}
               <View style={styles.filterGroup}>
-                <Text style={styles.filterLabel}>Ordenar por:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={ordenamiento}
-                    onValueChange={setOrdenamiento}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Fecha de publicación" value="Fecha de publicación" />
-                    <Picker.Item label="Título" value="Título" />
-                  </Picker>
+                <Text style={[styles.filterLabel, { color: colors.text }]}>Ordenar por:</Text>
+                <View style={styles.choiceRow}>
+                  {['Fecha de publicación', 'Título'].map((opt) => {
+                    const selected = ordenamiento === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: selected ? colors.primary : colors.surface,
+                            borderColor: selected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => setOrdenamiento(opt)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceButtonText,
+                            { color: selected ? '#FFFFFF' : colors.textSecondary },
+                          ]}
+                        >
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
 
               {/* Ingredientes a incluir */}
               <View style={styles.filterGroup}>
-                <Text style={styles.filterLabel}>Ingredientes a incluir (separados por coma):</Text>
+                <Text style={[styles.filterLabel, { color: colors.text }]}>Ingredientes a incluir (separados por coma):</Text>
                 <TextInput
-                  style={styles.filterInput}
+                  style={[styles.filterInput, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
                   placeholder="ej: tomate, queso, harina"
-                  placeholderTextColor="#D1D5DB"
+                  placeholderTextColor={colors.textSecondary}
                   value={incluye}
                   onChangeText={setIncluye}
                   multiline
@@ -430,11 +450,11 @@ export const BuscarScreen = ({ navigation }) => {
 
               {/* Ingredientes a excluir */}
               <View style={styles.filterGroup}>
-                <Text style={styles.filterLabel}>Ingredientes a excluir (separados por coma):</Text>
+                <Text style={[styles.filterLabel, { color: colors.text }]}>Ingredientes a excluir (separados por coma):</Text>
                 <TextInput
-                  style={styles.filterInput}
+                  style={[styles.filterInput, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
                   placeholder="ej: nueces, marisco"
-                  placeholderTextColor="#D1D5DB"
+                  placeholderTextColor={colors.textSecondary}
                   value={excluye}
                   onChangeText={setExcluye}
                   multiline
@@ -443,21 +463,24 @@ export const BuscarScreen = ({ navigation }) => {
 
               {/* Tiempo de preparación */}
               <View style={styles.filterGroup}>
-                <Text style={styles.filterLabel}>Tiempo de preparación máximo:</Text>
+                <Text style={[styles.filterLabel, { color: colors.text }]}>Tiempo de preparación máximo:</Text>
                 <View style={styles.timeButtonsContainer}>
                   {[10, 20, 30, 60].map(minutos => (
                     <TouchableOpacity
                       key={minutos}
                       style={[
                         styles.timeButton,
-                        tiempoMax === minutos && styles.timeButtonActive,
+                        {
+                          backgroundColor: tiempoMax === minutos ? colors.primary : colors.surface,
+                          borderColor: tiempoMax === minutos ? colors.primary : colors.border,
+                        },
                       ]}
                       onPress={() => setTiempoMax(tiempoMax === minutos ? null : minutos)}
                     >
                       <Text
                         style={[
                           styles.timeButtonText,
-                          tiempoMax === minutos && styles.timeButtonTextActive,
+                          { color: tiempoMax === minutos ? '#FFFFFF' : colors.textSecondary },
                         ]}
                       >
                         {minutos} min
@@ -469,28 +492,47 @@ export const BuscarScreen = ({ navigation }) => {
 
               {/* Dificultad */}
               <View style={styles.filterGroup}>
-                <Text style={styles.filterLabel}>Dificultad:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={dificultad}
-                    onValueChange={setDificultad}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Cualquiera" value="Cualquiera" />
-                    <Picker.Item label="Fácil" value="Fácil" />
-                    <Picker.Item label="Media" value="Media" />
-                    <Picker.Item label="Difícil" value="Difícil" />
-                  </Picker>
+                <Text style={[styles.filterLabel, { color: colors.text }]}>Dificultad:</Text>
+                <View style={styles.choiceRow}>
+                  {['Cualquiera', 'Fácil', 'Media', 'Difícil'].map((opt) => {
+                    const selected = dificultad === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: selected ? colors.primary : colors.surface,
+                            borderColor: selected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => setDificultad(opt)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceButtonText,
+                            { color: selected ? '#FFFFFF' : colors.textSecondary },
+                          ]}
+                        >
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             </ScrollView>
 
             {/* Botones de acción */}
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.btnSecondary} onPress={resetearFiltros}>
-                <Text style={styles.btnSecondaryText}>Resetear</Text>
+            <View style={[styles.modalFooter, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+              <TouchableOpacity
+                style={[styles.btnSecondary, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                onPress={resetearFiltros}
+              >
+                <Text style={[styles.btnSecondaryText, { color: colors.primary }]}>Resetear</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnPrimary} onPress={aceptarFiltro}>
+              <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary }]} onPress={aceptarFiltro}>
                 <Text style={styles.btnPrimaryText}>Aplicar</Text>
               </TouchableOpacity>
             </View>
@@ -625,12 +667,12 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     paddingBottom: 0,
   },
   modalContent: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -662,16 +704,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 10,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#F9FAFB',
-  },
-  picker: {
-    height: 55,
   },
   filterInput: {
     borderWidth: 1,
@@ -711,6 +743,21 @@ const styles = StyleSheet.create({
   timeButtonTextActive: {
     color: '#FFFFFF',
   },
+  choiceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  choiceButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  choiceButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   modalFooter: {
     flexDirection: 'row',
     gap: 12,
@@ -718,7 +765,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     position: 'absolute',
     bottom: 0,
     left: 0,

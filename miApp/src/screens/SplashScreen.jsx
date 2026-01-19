@@ -3,8 +3,11 @@ import { View, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/apiClient';
+import { useTheme } from '../context/ThemeContext';
 
 export const SplashScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+
   useEffect(() => {
     const checkToken = async () => {
       try {
@@ -36,8 +39,8 @@ export const SplashScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.content, { backgroundColor: colors.background }]}>
         <Image source={require('../../assets/logo.png')} style={styles.logo} />
       </View>
     </SafeAreaView>
@@ -47,13 +50,11 @@ export const SplashScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     width: 200,

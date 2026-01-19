@@ -408,11 +408,11 @@ export const PerfilScreen = ({ navigation }) => {
           {/* Descripción editable */}
           <View style={styles.descriptionContainer}>
             {editingDescription ? (
-              <View style={styles.editDescriptionBox}>
+              <View style={[styles.editDescriptionBox, { backgroundColor: colors.cardBackground, borderColor: colors.border }] }>
                 <TextInput
-                  style={styles.descriptionInput}
+                  style={[styles.descriptionInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                   placeholder="Añade una descripción..."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.textSecondary}
                   value={newDescription}
                   onChangeText={setNewDescription}
                   multiline
@@ -420,19 +420,19 @@ export const PerfilScreen = ({ navigation }) => {
                 />
                 <View style={styles.editDescriptionButtons}>
                   <TouchableOpacity
-                    style={styles.btnCancel}
+                    style={[styles.btnCancel, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => {
                       setEditingDescription(false);
                       setNewDescription(usuario.descripcion || '');
                     }}
                   >
-                    <Text style={styles.btnCancelText}>Cancelar</Text>
+                    <Text style={[styles.btnCancelText, { color: colors.text }]}>Cancelar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.btnSave}
+                    style={[styles.btnSave, { backgroundColor: colors.primary }]}
                     onPress={guardarDescripcion}
                   >
-                    <Text style={styles.btnSaveText}>Guardar</Text>
+                    <Text style={[styles.btnSaveText, { color: '#FFFFFF' }]}>Guardar</Text>
                   </TouchableOpacity>
                 </View>
               </View>
