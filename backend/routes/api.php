@@ -34,7 +34,7 @@ Route::get('/usuarios/{id}/seguidores', [SeguidorController::class, 'obtenerSegu
 Route::get('/usuarios/{id}/siguiendo', [SeguidorController::class, 'obtenerSiguiendo']);
 
 // Rutas protegidas (requieren token)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'not_blocked'])->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);

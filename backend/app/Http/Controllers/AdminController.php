@@ -530,13 +530,12 @@ class AdminController extends Controller
         if ($report->usuario) {
             $tituloReceta = $receta ? ($receta->titulo ?? 'una receta') : 'una receta';
             $status = $status;
-            $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
 
             $this->notifyUser(
                 $report->usuario,
                 'report_reviewed',
                 '📣 Tu reporte fue revisado',
-                'Tu reporte sobre "' . $tituloReceta . '" fue ' . $statusLabel . '. Respuesta: ' . $responseText,
+                'Tu reporte sobre "' . $tituloReceta . '" fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
                 $report->receta_id,
                 Auth::id(),
                 [
@@ -643,6 +642,26 @@ class AdminController extends Controller
             'reviewed_at' => now(),
         ]);
 
+        $deleteReportedComment = function () use ($report) {
+            $comentario = $report->comentario;
+            if (!$comentario) {
+                return;
+            }
+
+            $recetaId = $comentario->receta_id;
+            $comentarioId = $comentario->getKey();
+
+            $comentario->delete();
+
+            if ($recetaId) {
+                Receta::where('id', $recetaId)
+                    ->where('comentarios_count', '>', 0)
+                    ->decrement('comentarios_count');
+            }
+
+            $this->logAction(Auth::id(), 'eliminar_comentario_reporte', 'Comentario', $comentarioId, 'Comentario eliminado por reporte');
+        };
+
         // Advertencia automática al autor del comentario cuando queda resuelto.
         if (($status ?? null) === 'resuelto' && $reportedUser) {
             $this->notifyUser(
@@ -669,16 +688,7 @@ class AdminController extends Controller
         // Ejecutar acción
         if ($action !== 'none') {
             if ($action === 'delete_comentario') {
-                $comentario = $report->comentario;
-                if ($comentario) {
-                    $recetaId = $comentario->receta_id;
-                    $comentarioId = $comentario->getKey();
-                    $comentario->delete();
-                    if ($recetaId) {
-                        Receta::where('id', $recetaId)->decrement('comentarios_count');
-                    }
-                    $this->logAction(Auth::id(), 'eliminar_comentario_reporte', 'Comentario', $comentarioId, 'Comentario eliminado por reporte');
-                }
+                $deleteReportedComment();
             } elseif ($action === 'block_comment_author') {
                 if ($reportedUser) {
                     $reportedUser->update([
@@ -686,6 +696,10 @@ class AdminController extends Controller
                         'blocked_at' => now(),
                         'block_reason' => 'Bloqueado por reporte de comentario (moderación)',
                     ]);
+
+                    // Si se bloquea al autor, también se elimina el comentario reportado.
+                    $deleteReportedComment();
+
                     $this->logAction(Auth::id(), 'bloquear_autor_comentario_reporte', 'User', $reportedUser->getKey(), 'Autor del comentario bloqueado por reporte');
                 }
             } elseif ($action === 'mute_comment_author_7d' || $action === 'mute_comment_author_30d') {
@@ -695,6 +709,10 @@ class AdminController extends Controller
                         'comment_banned_until' => now()->addDays($days),
                         'comment_ban_reason' => 'Prohibido comentar por reporte de comentario (moderación)',
                     ]);
+
+                    // Si se prohíbe comentar, también se elimina el comentario reportado.
+                    $deleteReportedComment();
+
                     $this->logAction(Auth::id(), 'prohibir_comentar_autor_comentario', 'User', $reportedUser->getKey(), 'Autor del comentario con prohibición de comentar', [
                         'days' => $days,
                     ]);
@@ -704,12 +722,11 @@ class AdminController extends Controller
 
         // Notificar al usuario que reportó
         if ($report->reporter) {
-            $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
             $this->notifyUser(
                 $report->reporter,
                 'report_reviewed',
                 '📣 Tu reporte fue revisado',
-                'Tu reporte de un comentario fue ' . $statusLabel . '. Respuesta: ' . $responseText,
+                'Tu reporte de un comentario fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
                 $report->receta_id,
                 Auth::id(),
                 [
@@ -842,13 +859,12 @@ class AdminController extends Controller
         if ($report->reporter) {
             $reportedName = $report->reportedUser->name ?? 'un usuario';
             $status = $status;
-            $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
 
             $this->notifyUser(
                 $report->reporter,
                 'report_reviewed',
                 '📣 Tu reporte fue revisado',
-                'Tu reporte sobre "' . $reportedName . '" fue ' . $statusLabel . '. Respuesta: ' . $responseText,
+                'Tu reporte sobre "' . $reportedName . '" fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
                 null,
                 Auth::id(),
                 [
@@ -894,7 +910,11 @@ class AdminController extends Controller
     {
         // Mensaje predeterminado para el usuario afectado.
         // Nota: el "status" se guarda para trazabilidad, pero el mensaje solo se usa como advertencia cuando status=resuelto.
-        $statusLabel = $status === 'resuelto' ? 'resuelto' : ($status === 'rechazado' ? 'rechazado' : 'revisado');
+        $subject = $type === 'receta'
+            ? 'Tu receta fue reportada.'
+            : ($type === 'comentario'
+                ? 'Tu comentario fue reportado.'
+                : 'Tu cuenta fue reportada.');
 
         $measure = 'Sin medidas adicionales.';
 
@@ -930,10 +950,10 @@ class AdminController extends Controller
                         $measure = 'Medida: tu cuenta fue bloqueada.';
                         break;
                     case 'mute_comment_author_7d':
-                        $measure = 'Medida: no podrás comentar durante 7 días.';
+                        $measure = 'Medida: no podrás comentar durante 7 días. Tu comentario fue eliminado.';
                         break;
                     case 'mute_comment_author_30d':
-                        $measure = 'Medida: no podrás comentar durante 30 días.';
+                        $measure = 'Medida: no podrás comentar durante 30 días. Tu comentario fue eliminado.';
                         break;
                     case 'none':
                     default:
@@ -957,7 +977,7 @@ class AdminController extends Controller
             }
         }
 
-        return 'Motivo: ' . $reasonLabel . '. Estado: ' . $statusLabel . '. ' . $measure;
+        return $subject . ' Motivo: ' . $reasonLabel . '. ' . $measure;
     }
 
     /**

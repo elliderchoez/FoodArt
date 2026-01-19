@@ -24,6 +24,7 @@ import {
   markNotificationAsRead,
   deleteNotification,
   clearAllNotifications,
+  consumeWarningPopupOnce,
 } from '../services/notificationService';
 
 // Componente de Alerta mejorado
@@ -135,6 +136,17 @@ export const AlertasScreen = ({ navigation }) => {
       const noLeidas = data.filter((n) => !n.read).length;
       setUnreadCount(noLeidas);
       setGlobalUnreadCount(noLeidas); // Actualizar el contexto global
+
+      // Popup para el usuario reportado: advertencias de moderación
+      const firstUnreadWarning = (Array.isArray(data) ? data : []).find(
+        (n) => !n.read && n?.data?.type === 'warning'
+      );
+      if (firstUnreadWarning) {
+        const shouldShow = await consumeWarningPopupOnce({ notificationId: firstUnreadWarning.id });
+        if (shouldShow) {
+          Alert.alert(firstUnreadWarning.title || '⚠️ Advertencia de moderación', firstUnreadWarning.body || '');
+        }
+      }
     } catch (error) {
       console.error('Error cargando alertas:', error);
       // Fallback a almacenamiento local
@@ -142,6 +154,16 @@ export const AlertasScreen = ({ navigation }) => {
       setAlertas(notificaciones);
       const noLeidas = notificaciones.filter((n) => !n.read).length;
       setGlobalUnreadCount(noLeidas);
+
+      const firstUnreadWarning = (Array.isArray(notificaciones) ? notificaciones : []).find(
+        (n) => !n.read && n?.data?.type === 'warning'
+      );
+      if (firstUnreadWarning) {
+        const shouldShow = await consumeWarningPopupOnce({ notificationId: firstUnreadWarning.id });
+        if (shouldShow) {
+          Alert.alert(firstUnreadWarning.title || '⚠️ Advertencia de moderación', firstUnreadWarning.body || '');
+        }
+      }
     } finally {
       setLoading(false);
     }

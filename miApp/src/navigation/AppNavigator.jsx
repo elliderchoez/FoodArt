@@ -26,10 +26,32 @@ import { AdminBackups } from '../screens/AdminBackups';
 import { AdminAccessScreen } from '../screens/AdminAccessScreen';
 import { CambiarContrasenaScreen } from '../screens/CambiarContrasenaScreen';
 import { OlvidarContrasenaScreen } from '../screens/OlvidarContrasenaScreen';
+import { BlockedWallScreen } from '../screens/BlockedWallScreen';
+import { useAppContext } from '../context/AppContext';
 
 const Stack = createNativeStackNavigator();
 
 export const AppNavigator = () => {
+  const { isBlocked } = useAppContext();
+
+  if (isBlocked) {
+    return (
+      <NavigationContainer>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            animationEnabled: false,
+            animation: 'none',
+          }}
+          initialRouteName="BlockedWall"
+        >
+          <Stack.Screen name="BlockedWall" component={BlockedWallScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -42,6 +64,7 @@ export const AppNavigator = () => {
       >
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="BlockedWall" component={BlockedWallScreen} />
         <Stack.Screen name="Registro" component={RegisterScreen} />
         <Stack.Screen name="OlvidarContrasena" component={OlvidarContrasenaScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />

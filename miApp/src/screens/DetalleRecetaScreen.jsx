@@ -18,6 +18,7 @@ import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
@@ -173,6 +174,16 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     };
     inicializar();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const id = recetaCompleta?.id || receta?.id || recetaId;
+      if (!id) return;
+      // Al volver a la pantalla (o al enfocarla), refrescar para reflejar eliminaciones/bloqueos.
+      cargarDetalleReceta(token, id);
+      cargarComentarios(id);
+    }, [recetaCompleta?.id, receta?.id, recetaId, token])
+  );
 
   useEffect(() => {
     const id = recetaCompleta?.id || receta?.id || recetaId;
@@ -441,7 +452,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       cargarDetalleReceta();
     } catch (error) {
       console.error('Error publicando comentario:', error);
-      Alert.alert('Error', 'No se pudo publicar el comentario');
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo publicar el comentario';
+      Alert.alert('Error', msg);
     }
   };
 

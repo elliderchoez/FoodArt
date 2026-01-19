@@ -30,7 +30,11 @@ export const SplashScreen = ({ navigation }) => {
 
   const validateToken = async (token, navigation) => {
     try {
-      await apiClient.get(`/user`);
+      const { data } = await apiClient.get(`/user`);
+      if (data?.is_blocked) {
+        navigation.replace('BlockedWall');
+        return;
+      }
       navigation.replace('Home');
     } catch (error) {
       await AsyncStorage.removeItem('authToken');

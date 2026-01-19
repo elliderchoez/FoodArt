@@ -21,5 +21,21 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status;
+    const data = error?.response?.data;
+
+    // Normalizar respuesta de cuenta bloqueada
+    if (status === 403 && (data?.code === 'ACCOUNT_BLOCKED' || data?.message === 'Tu cuenta ha sido bloqueada')) {
+      error.isAccountBlocked = true;
+      error.blockReason = data?.reason || null;
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;
 export { API_URL };

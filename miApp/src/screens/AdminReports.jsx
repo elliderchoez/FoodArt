@@ -67,7 +67,7 @@ export const AdminReports = ({ navigation }) => {
 
   const buildDefaultModerationMessage = (report, status, action) => {
     const reasonLabel = getReasonLabel(report?.reason);
-    const statusLabel = status === 'resuelto' ? 'resuelto' : status === 'rechazado' ? 'rechazado' : 'revisado';
+    const subject = report?.type === 'usuario' ? 'Tu cuenta fue reportada.' : report?.type === 'comentario' ? 'Tu comentario fue reportado.' : 'Tu receta fue reportada.';
 
     let measure = 'Medida: sin acciones adicionales.';
 
@@ -78,8 +78,8 @@ export const AdminReports = ({ navigation }) => {
     } else if (report?.type === 'comentario') {
       if (action === 'delete_comentario') measure = 'Medida: tu comentario fue eliminado.';
       else if (action === 'block_comment_author') measure = 'Medida: tu cuenta fue bloqueada.';
-      else if (action === 'mute_comment_author_7d') measure = 'Medida: no podrás comentar durante 7 días.';
-      else if (action === 'mute_comment_author_30d') measure = 'Medida: no podrás comentar durante 30 días.';
+      else if (action === 'mute_comment_author_7d') measure = 'Medida: no podrás comentar durante 7 días. Tu comentario fue eliminado.';
+      else if (action === 'mute_comment_author_30d') measure = 'Medida: no podrás comentar durante 30 días. Tu comentario fue eliminado.';
     } else {
       if (action === 'delete_receta') measure = 'Medida: tu receta fue eliminada.';
       else if (action === 'block_recipe') measure = 'Medida: tu receta fue bloqueada.';
@@ -88,7 +88,7 @@ export const AdminReports = ({ navigation }) => {
       else if (action === 'mute_recipe_author_30d') measure = 'Medida: no podrás comentar durante 30 días.';
     }
 
-    return `Motivo: ${reasonLabel}. Estado: ${statusLabel}. ${measure}`;
+    return `${subject} Motivo: ${reasonLabel}. ${measure}`;
   };
 
   const confirmAsync = (title, message) => {
