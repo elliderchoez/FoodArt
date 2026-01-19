@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ const categorias = [
   { id: 9, nombre: 'Ensaladas', emoji: '🥙', seleccionada: false },
 ];
 
-// Componente de Categoría
+// --- Componente de Categoría ---
 const CategoriaItem = ({ categoria, onPress, colors }) => {
   const isSelected = !!categoria.seleccionada;
   const bg = isSelected ? colors.primary : colors.surface;
@@ -64,36 +64,37 @@ const CategoriaItem = ({ categoria, onPress, colors }) => {
   );
 };
 
-// Componente de Post/Receta
+// --- Componente de Post/Receta ---
 const PostItem = ({ post, onPress, token, navigation, colors }) => {
   const [liked, setLiked] = useState(post.liked || false);
   const [saved, setSaved] = useState(post.saved || false);
   const [likesCount, setLikesCount] = useState(post.likes || 0);
 
+  // Imágenes por defecto para evitar errores
+  const imagenReceta = post.imagen ? { uri: post.imagen } : { uri: 'https://via.placeholder.com/400x300?text=Sin+Imagen' };
+  const imagenUsuario = post.usuarioImagen ? { uri: post.usuarioImagen } : { uri: 'https://via.placeholder.com/40' };
+
   const handleLike = async (e) => {
     e.stopPropagation();
     
     if (!token) {
-      Alert.alert('Error', 'Debes iniciar sesión');
+      Alert.alert('Atención', 'Debes iniciar sesión para dar like.');
       return;
     }
 
+    const estadoAnterior = liked;
+    const nuevoEstado = !liked;
+    
+    setLiked(nuevoEstado);
+    setLikesCount(nuevoEstado ? likesCount + 1 : Math.max(0, likesCount - 1));
+
     try {
-      const nuevoEstado = !liked;
-      setLiked(nuevoEstado);
-      setLikesCount(nuevoEstado ? likesCount + 1 : Math.max(0, likesCount - 1));
-
       await apiClient.post(`/recetas/${post.id}/like`);
-
-      if (!nuevoEstado) {
-        setLiked(false);
-        setLikesCount(Math.max(0, likesCount - 1));
-      }
     } catch (error) {
       console.error('Error dando like:', error);
-      setLiked(!liked);
-      setLikesCount(!liked ? likesCount + 1 : Math.max(0, likesCount - 1));
-      Alert.alert('Error', 'No se pudo dar like');
+      setLiked(estadoAnterior);
+      setLikesCount(estadoAnterior ? likesCount + 1 : Math.max(0, likesCount - 1));
+      Alert.alert('Error', 'No se pudo registrar el like');
     }
   };
 
@@ -101,25 +102,26 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
     e.stopPropagation();
     
     if (!token) {
-      Alert.alert('Error', 'Debes iniciar sesión');
+      Alert.alert('Atención', 'Debes iniciar sesión para guardar.');
       return;
     }
 
-    try {
-      const nuevoEstado = !saved;
-      setSaved(nuevoEstado);
+    const estadoAnterior = saved;
+    const nuevoEstado = !saved;
+    setSaved(nuevoEstado);
 
+    try {
       await apiClient.post(`/recetas/${post.id}/save`);
     } catch (error) {
       console.error('Error guardando:', error);
-      setSaved(!saved);
+      setSaved(estadoAnterior);
       Alert.alert('Error', 'No se pudo guardar la receta');
     }
   };
 
   return (
     <TouchableOpacity style={[styles.postCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]} onPress={onPress}>
-      <Image source={{ uri: post.imagen }} style={styles.postImage} />
+      <Image source={imagenReceta} style={styles.postImage} resizeMode="cover" />
       
       <View style={[styles.postContent, { backgroundColor: colors.cardBackground }]}>
         {/* Usuario */}
@@ -127,7 +129,7 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
           style={styles.postHeader}
           onPress={() => navigation.navigate('UsuarioPerfil', { usuarioId: post.user_id })}
         >
-          <Image source={{ uri: post.usuarioImagen }} style={styles.userAvatar} />
+          <Image source={imagenUsuario} style={styles.userAvatar} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.userName, { color: colors.text }]}>{post.usuarioNombre}</Text>
             <Text style={[styles.postTime, { color: colors.textSecondary }]}>Hace 2 horas</Text>
@@ -136,32 +138,33 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
 
         {/* Título y descripción */}
         <Text style={[styles.postTitle, { color: colors.text }]}>{post.titulo}</Text>
-        <Text style={[styles.postDescription, { color: colors.textSecondary }]}>{post.descripcion}</Text>
+        <Text numberOfLines={3} style={[styles.postDescription, { color: colors.textSecondary }]}>{post.descripcion}</Text>
 
         {/* Información de la receta */}
         <View style={styles.recipeInfo}>
           <View style={styles.infoItem}>
-            <Icon name="clock-outline" size={14} color={colors.primary} />
+            <Icon name="clock-outline" size={16} color={colors.primary} />
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>{post.tiempoPreparacion}</Text>
           </View>
           <View style={styles.infoItem}>
-            <Icon name="chart-line" size={14} color={colors.primary} />
-            <Text style={[styles.infoText, { color: colors.textSecondary }]}>{post.tiempoPreparacion}</Text>
+            <Icon name="chart-line" size={16} color={colors.primary} />
+            {/* CORREGIDO: Muestra Dificultad en vez de repetir tiempo */}
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>{post.dificultad || 'Media'}</Text>
           </View>
         </View>
 
         {/* Acciones */}
         <View style={styles.postActions}>
           <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-            <Icon name={liked ? 'heart' : 'heart-outline'} size={20} color={liked ? '#FF4757' : colors.textSecondary} />
+            <Icon name={liked ? 'heart' : 'heart-outline'} size={22} color={liked ? '#FF4757' : colors.textSecondary} />
             <Text style={[styles.actionText, { color: colors.textSecondary }]}>{likesCount}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton}>
-            <Icon name="comment-outline" size={20} color={colors.textSecondary} />
+            <Icon name="comment-outline" size={22} color={colors.textSecondary} />
             <Text style={[styles.actionText, { color: colors.textSecondary }]}>{post.comentarios}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={handleSave}>
-            <Icon name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={saved ? colors.primary : colors.textSecondary} />
+            <Icon name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={saved ? colors.primary : colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -169,11 +172,13 @@ const PostItem = ({ post, onPress, token, navigation, colors }) => {
   );
 };
 
+// --- Pantalla Principal ---
 export const HomeScreen = ({ navigation }) => {
   const { colors, isDarkMode } = useTheme();
   const { unreadCount } = useNotificationCount();
   const { isAdmin } = useAppContext();
   const PAGE_SIZE = 10;
+
   const [categoria, setCategoria] = useState('Todas');
   const [posts, setPosts] = useState([]);
   const [postsFiltrados, setPostsFiltrados] = useState([]);
@@ -190,22 +195,19 @@ export const HomeScreen = ({ navigation }) => {
   }, []);
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
+      cargarRecetas(token);
       if (token) {
-        cargarRecetas(token);
         cargarNotificacionesPendientes(token);
       }
-      return () => {};
     }, [token])
   );
 
   const cargarNotificacionesPendientes = async (tk) => {
     try {
       const { data } = await apiClient.get(`/notifications`);
-      const notificaciones = data.data || [];
-      const noLeidas = notificaciones.filter((n) => !n.read).length;
     } catch (error) {
-      console.error('Error cargando notificaciones pendientes:', error);
+      console.log('Error silenciado notificaciones:', error.message);
     }
   };
 
@@ -213,40 +215,31 @@ export const HomeScreen = ({ navigation }) => {
     try {
       const tk = await AsyncStorage.getItem('authToken');
       setToken(tk);
-      cargarRecetas(tk, { page: 1, append: false });
     } catch (error) {
       console.error('Error obteniendo token:', error);
       setToken(null);
-      cargarRecetas(null, { page: 1, append: false });
     }
   };
 
   const aplicarFiltroCategoria = (items, categoriaNombre) => {
+    if (!items) return [];
     if (categoriaNombre === 'Todas') return items;
 
     return items.filter(post => {
       const titulo = (post.titulo || '').toLowerCase();
+      const terminos = {
+        'Pizza': ['pizza'],
+        'Mexicana': ['taco', 'burrito', 'quesadilla', 'enchilada', 'mexic'],
+        'Postres': ['postre', 'pastel', 'chocolate', 'brownie', 'galleta', 'cheesecake', 'dulce'],
+        'Saludable': ['bowl', 'ensalada', 'vegano', 'light', 'poke', 'fit'],
+        'Asiática': ['sushi', 'ramen', 'pad thai', 'wok', 'arroz', 'chino', 'japon'],
+        'Hamburguesas': ['hamburguesa', 'burger'],
+        'Pasta': ['pasta', 'espagueti', 'lasaña', 'carbonara', 'pesto', 'macarron'],
+        'Ensaladas': ['ensalada', 'césar', 'salad', 'lechuga']
+      };
 
-      switch (categoriaNombre) {
-        case 'Pizza':
-          return titulo.includes('pizza');
-        case 'Mexicana':
-          return ['taco', 'burrito', 'quesadilla', 'enchilada'].some(word => titulo.includes(word));
-        case 'Postres':
-          return ['postre', 'pastel', 'chocolate', 'brownie', 'galleta', 'cheesecake'].some(word => titulo.includes(word));
-        case 'Saludable':
-          return ['bowl', 'ensalada', 'vegano', 'light', 'poke'].some(word => titulo.includes(word));
-        case 'Asiática':
-          return ['sushi', 'ramen', 'pad thai', 'wok'].some(word => titulo.includes(word));
-        case 'Hamburguesas':
-          return ['hamburguesa', 'burger'].some(word => titulo.includes(word));
-        case 'Pasta':
-          return ['pasta', 'espagueti', 'lasaña', 'carbonara', 'pesto'].some(word => titulo.includes(word));
-        case 'Ensaladas':
-          return ['ensalada', 'césar', 'salad'].some(word => titulo.includes(word));
-        default:
-          return true;
-      }
+      const palabrasClave = terminos[categoriaNombre];
+      return palabrasClave ? palabrasClave.some(word => titulo.includes(word)) : true;
     });
   };
 
@@ -255,7 +248,7 @@ export const HomeScreen = ({ navigation }) => {
     const append = options.append ?? false;
     const isRefresh = options.refresh ?? false;
 
-    if (loading || loadingMore || refreshing) return;
+    if (loading || (loadingMore && append) || (refreshing && isRefresh)) return;
 
     if (append) {
       setLoadingMore(true);
@@ -263,14 +256,11 @@ export const HomeScreen = ({ navigation }) => {
       setRefreshing(true);
     } else {
       setLoading(true);
-      setHasMore(true);
-      setPage(1);
     }
 
     try {
       const { data } = await apiClient.get(`/recetas?page=${pageToLoad}&per_page=${PAGE_SIZE}`);
       
-      // Transformar datos de la API al formato esperado por el componente
       const recetasFormateadas = (data.data || []).map(receta => ({
         id: receta.id,
         user_id: receta.user_id,
@@ -278,9 +268,9 @@ export const HomeScreen = ({ navigation }) => {
         descripcion: receta.descripcion,
         imagen: receta.imagen_url,
         usuarioNombre: receta.user?.name || 'Usuario',
-        usuarioImagen: receta.user?.imagen_perfil || 'https://via.placeholder.com/40',
-        tiempoPreparacion: `${receta.tiempo_preparacion} min`,
-        dificultad: receta.dificultad,
+        usuarioImagen: receta.user?.imagen_perfil,
+        tiempoPreparacion: receta.tiempo_preparacion ? `${receta.tiempo_preparacion} min` : 'N/A',
+        dificultad: receta.dificultad || 'Media',
         likes: receta.likes_count || 0,
         comentarios: receta.comentarios_count || 0,
         liked: receta.user_liked || false,
@@ -306,7 +296,9 @@ export const HomeScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Error cargando recetas:', error);
-      Alert.alert('Error', 'No se pudieron cargar las recetas');
+      if(!append && !isRefresh) {
+         Alert.alert('Error', 'No se pudieron cargar las recetas');
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -316,13 +308,11 @@ export const HomeScreen = ({ navigation }) => {
 
   const seleccionarCategoria = (categoriaNombre) => {
     setCategoria(categoriaNombre);
-    
     const nuevasCategorias = catList.map(cat => ({
       ...cat,
       seleccionada: cat.nombre === categoriaNombre
     }));
     setCatList(nuevasCategorias);
-
     setPostsFiltrados(aplicarFiltroCategoria(posts, categoriaNombre));
   };
 
@@ -335,47 +325,47 @@ export const HomeScreen = ({ navigation }) => {
     cargarRecetas(token, { page: 1, append: false, refresh: true });
   };
 
-  const irA = (pantalla) => {
-    navigation.navigate(pantalla);
-  };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}> 
       <View style={styles.contentContainer}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>FOOD ART</Text>
+          <Text style={[styles.headerTitle, { color: '#D4AF37' }]}>FOOD ART</Text>
         </View>
 
         {/* Categorías */}
-        <FlatList
-          data={catList}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id.toString()}
-          renderItem={({ item }) => (
-            <CategoriaItem 
-              categoria={item}
-              colors={colors}
-              onPress={() => seleccionarCategoria(item.nombre)}
+        <View>
+            <FlatList
+            data={catList}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+                <CategoriaItem 
+                categoria={item}
+                colors={colors}
+                onPress={() => seleccionarCategoria(item.nombre)}
+                />
+            )}
+            style={styles.categoriasList}
+            contentContainerStyle={styles.categoriasContainer}
             />
-          )}
-          style={styles.categoriasList}
-          contentContainerStyle={styles.categoriasContainer}
-        />
+        </View>
 
         <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
 
         {/* Feed */}
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#D4AF37" />
           </View>
         ) : postsFiltrados.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name="silverware-fork-knife" size={64} color="#D4AF37" />
-            <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas aún</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Las recetas aparecerán aquí</Text>
+            <Icon name="silverware-fork-knife" size={64} color="#D4AF37" opacity={0.5} />
+            <Text style={[styles.emptyText, { color: colors.text }]}>No hay recetas</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+                {categoria !== 'Todas' ? `No hay resultados para ${categoria}` : 'Las recetas aparecerán aquí'}
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -391,7 +381,8 @@ export const HomeScreen = ({ navigation }) => {
               />
             )}
             style={styles.feedList}
-            contentContainerStyle={styles.feedContainer}
+            // AQUÍ ESTÁ EL CAMBIO CLAVE: paddingBottom grande para que no se tape con la barra flotante
+            contentContainerStyle={[styles.feedContainer, { paddingBottom: 100 }]} 
             showsVerticalScrollIndicator={false}
             onEndReached={cargarMas}
             onEndReachedThreshold={0.5}
@@ -399,14 +390,8 @@ export const HomeScreen = ({ navigation }) => {
             onRefresh={refrescar}
             ListFooterComponent={
               loadingMore ? (
-                <View style={{ paddingVertical: 16 }}>
+                <View style={{ paddingVertical: 20 }}>
                   <ActivityIndicator size="small" color={colors.primary} />
-                </View>
-              ) : !hasMore && posts.length > 0 ? (
-                <View style={{ paddingVertical: 18 }}>
-                  <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '600' }}>
-                    Ya no hay más recetas
-                  </Text>
                 </View>
               ) : null
             }
@@ -414,11 +399,14 @@ export const HomeScreen = ({ navigation }) => {
         )}
       </View>
 
-      {isAdmin ? (
-        <AdminBottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
-      ) : (
-        <BottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
-      )}
+      {/* --- AQUÍ ESTÁ EL CONTENEDOR FLOTANTE ABSOLUTO --- */}
+      <View style={styles.bottomBarContainer}>
+        {isAdmin ? (
+            <AdminBottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
+        ) : (
+            <BottomNavBar navigation={navigation} currentRoute="Home" colors={colors} />
+        )}
+      </View>
     </SafeAreaView>
   );
 };
@@ -427,9 +415,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    position: 'relative', // Necesario para el absoluto
   },
   contentContainer: {
     flex: 1,
+  },
+  // ESTILO DE LA BARRA FLOTANTE
+  bottomBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    elevation: 10,
+    zIndex: 100,
   },
   header: {
     height: 50,
@@ -441,19 +440,15 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#D4AF37',
     letterSpacing: 1.5,
   },
   categoriasContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 12,
-    alignItems: 'center',
   },
   categoriasList: {
-    maxHeight: 96,
     flexGrow: 0,
-    flexShrink: 0,
     marginBottom: 2,
   },
   sectionDivider: {
@@ -466,14 +461,14 @@ const styles = StyleSheet.create({
   categoriaItem: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    width: 58,
-    height: 72,
+    width: 60, 
+    height: 75,
     marginRight: 8,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
     borderColor: '#F3F4F6',
-    paddingTop: 6,
+    paddingTop: 8,
     paddingBottom: 6,
   },
   bookmarkCutout: {
@@ -490,8 +485,8 @@ const styles = StyleSheet.create({
     borderRightColor: 'transparent',
   },
   categoriaEmoji: {
-    fontSize: 21,
-    marginBottom: 2,
+    fontSize: 22,
+    marginBottom: 4,
   },
   categoriaNombre: {
     fontSize: 10,
@@ -499,28 +494,27 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 12,
-    includeFontPadding: false,
-    minHeight: 24,
     paddingHorizontal: 2,
-    paddingBottom: 1,
   },
   categoriaNombreSel: {
     color: '#FFFFFF',
     fontWeight: '600',
   },
   feedContainer: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 50,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 80,
   },
   emptyText: {
     fontSize: 18,
@@ -535,22 +529,23 @@ const styles = StyleSheet.create({
   },
   postCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 12,
-    elevation: 2,
+    marginBottom: 20,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
+    borderWidth: 1,
   },
   postImage: {
     width: '100%',
-    height: 250,
-    backgroundColor: '#F3F4F6',
+    height: 220,
+    backgroundColor: '#E5E7EB',
   },
   postContent: {
-    padding: 12,
+    padding: 16,
   },
   postHeader: {
     flexDirection: 'row',
@@ -558,63 +553,65 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#E5E7EB',
   },
   userName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1F2937',
   },
   postTime: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9CA3AF',
-    marginTop: 2,
+    marginTop: 1,
   },
   postTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#1F2937',
     marginBottom: 6,
   },
   postDescription: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 10,
-    lineHeight: 18,
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 12,
+    lineHeight: 20,
   },
   recipeInfo: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 20,
   },
   infoText: {
     fontSize: 12,
+    fontWeight: '500',
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 6,
   },
   postActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
   },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
+    padding: 4,
   },
   actionText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '600',
     color: '#6B7280',
     marginLeft: 6,
   },
