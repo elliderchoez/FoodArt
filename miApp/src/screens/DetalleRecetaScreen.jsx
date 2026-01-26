@@ -828,7 +828,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
         {/* Opciones Admin */}
         {isAdmin && (
-          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
             <Text style={[styles.adminTitle, { color: colors.text }]}>Opciones de Admin</Text>
             <View style={styles.adminButtons}>
               <TouchableOpacity
@@ -858,6 +858,37 @@ export default function DetalleRecetaScreen({ route, navigation }) {
                     </Text>
                   </>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: '#FF4757', opacity: deletingReceta ? 0.5 : 1 }]}
+                onPress={handleDeleteReceta}
+                disabled={deletingReceta}
+              >
+                {deletingReceta ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="trash-can" size={18} color="#fff" />
+                    <Text style={styles.adminButtonText}>Eliminar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Opciones para el dueño de la receta */}
+        {esMiReceta && !isAdmin && (
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
+            <Text style={[styles.adminTitle, { color: colors.text }]}>Tus opciones</Text>
+            <View style={styles.adminButtons}>
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: colors.primary }]}
+                onPress={openEditModal}
+              >
+                <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+                <Text style={styles.adminButtonText}>Editar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

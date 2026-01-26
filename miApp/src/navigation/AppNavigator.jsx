@@ -28,28 +28,27 @@ import { CambiarContrasenaScreen } from '../screens/CambiarContrasenaScreen';
 import { OlvidarContrasenaScreen } from '../screens/OlvidarContrasenaScreen';
 import { BlockedWallScreen } from '../screens/BlockedWallScreen';
 import { useAppContext } from '../context/AppContext';
+import { ActivityIndicator, View } from 'react-native';
 
 const Stack = createNativeStackNavigator();
 
-export const AppNavigator = () => {
-  const { isBlocked } = useAppContext();
 
-  if (isBlocked) {
+export const AppNavigator = () => {
+  const { user, loadingAuth, isBlocked } = useAppContext();
+
+  if (loadingAuth) {
     return (
-      <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            animationEnabled: false,
-            animation: 'none',
-          }}
-          initialRouteName="BlockedWall"
-        >
-          <Stack.Screen name="BlockedWall" component={BlockedWallScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#D4AF37" />
+      </View>
     );
+  }
+
+  let initialRoute = 'Login';
+  if (isBlocked) {
+    initialRoute = 'BlockedWall';
+  } else if (user) {
+    initialRoute = 'Home';
   }
 
   return (
@@ -60,7 +59,7 @@ export const AppNavigator = () => {
           animationEnabled: false,
           animation: 'none',
         }}
-        initialRouteName="Splash"
+        initialRouteName={initialRoute}
       >
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
@@ -80,7 +79,6 @@ export const AppNavigator = () => {
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="PlanComidas" component={PlanComidasScreen} />
         <Stack.Screen name="ListadoCompras" component={ListadoComprasScreen} />
-        
         {/* Admin Screens */}
         <Stack.Screen name="AdminAccess" component={AdminAccessScreen} />
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
@@ -93,4 +91,4 @@ export const AppNavigator = () => {
       </Stack.Navigator>
     </NavigationContainer>
   );
-};
+}
