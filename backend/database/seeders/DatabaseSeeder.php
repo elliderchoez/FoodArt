@@ -29,17 +29,9 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Usuario administrador
-        User::firstOrCreate(
-            ['email' => 'admin@foodart.com'],
-            [
-                'name' => 'Administrador',
-                'email' => 'admin@foodart.com',
-                'password' => Hash::make('admin12345'),
-                'descripcion' => 'Administrador de la plataforma Food Art',
-                'imagen_perfil' => 'https://via.placeholder.com/150?text=Admin',
-                'email_verified_at' => now(),
-            ]
-        );
+        // Usuario administrador (role=admin)
+        $this->call([
+            AdminSeeder::class,
+        ]);
     }
 }

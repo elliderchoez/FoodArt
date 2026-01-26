@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  Modal,
   Alert,
   ActivityIndicator,
   StyleSheet,
@@ -15,11 +16,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../services/apiClient';
+import { useTheme } from '../context/ThemeContext';
 
 export default function CrearRecetaScreen({ navigation }) {
+  const { colors } = useTheme();
+
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [tiempo, setTiempo] = useState('');
@@ -31,6 +34,27 @@ export default function CrearRecetaScreen({ navigation }) {
   const [imagenUri, setImagenUri] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [openSelect, setOpenSelect] = useState(null); // 'dificultad' | 'tipoDieta' | null
+
+  const DIFICULTADES = [
+    { label: 'Fácil', value: 'Fácil' },
+    { label: 'Media', value: 'Media' },
+    { label: 'Difícil', value: 'Difícil' },
+  ];
+
+  const TIPOS_DIETA = [
+    { label: 'Mixta', value: 'mixta' },
+    { label: 'Vegana', value: 'vegana' },
+    { label: 'Vegetariana', value: 'vegetariana' },
+    { label: 'Carnes', value: 'carnes' },
+    { label: 'Gym', value: 'gym' },
+    { label: 'Bajar de Peso', value: 'bajar_peso' },
+  ];
+
+  const getLabelFromValue = (items, value) => {
+    const found = items.find((i) => i.value === value);
+    return found ? found.label : String(value ?? '');
+  };
 
   // Seleccionar imagen de galería o cámara
   const seleccionarImagen = async () => {
@@ -199,151 +223,201 @@ export default function CrearRecetaScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <MaterialCommunityIcons name="close" size={28} color="#000" />
+            <MaterialCommunityIcons name="close" size={28} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nueva Receta</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Nueva Receta</Text>
           <TouchableOpacity
             onPress={publicarReceta}
             disabled={loading || uploadingImage}
             style={[styles.publicarBtn, (loading || uploadingImage) && styles.disabled]}
           >
             {loading || uploadingImage ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.publicarBtnText}>Publicar</Text>
             )}
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={[styles.scrollView, { backgroundColor: colors.background }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Foto de la receta */}
-        <TouchableOpacity style={styles.fotoContainer} onPress={seleccionarImagen}>
+        <TouchableOpacity style={[styles.fotoContainer, { backgroundColor: colors.surface }]} onPress={seleccionarImagen}>
           {imagenUri ? (
             <Image source={{ uri: imagenUri }} style={styles.fotoReceta} />
           ) : (
-            <View style={styles.fotoPlaceholder}>
+            <View style={[styles.fotoPlaceholder, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
               <MaterialCommunityIcons name="camera-plus-outline" size={48} color="#D4AF37" />
-              <Text style={styles.agregarFotoText}>Agregar Foto</Text>
+              <Text style={[styles.agregarFotoText, { color: colors.primary }]}>Agregar Foto</Text>
             </View>
           )}
         </TouchableOpacity>
 
         {uploadingImage && (
-          <View style={styles.uploadingIndicator}>
+          <View style={[styles.uploadingIndicator, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <ActivityIndicator size="small" color="#D4AF37" />
-            <Text style={styles.uploadingText}>Subiendo imagen...</Text>
+            <Text style={[styles.uploadingText, { color: colors.primary }]}>Subiendo imagen...</Text>
           </View>
         )}
 
         {/* Título */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Título de la receta</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Título de la receta</Text>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
             placeholder="Ej: Tacos al Pastor"
             value={titulo}
             onChangeText={setTitulo}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             maxLength={100}
           />
         </View>
 
         {/* Descripción */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Descripción</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Descripción</Text>
           <TextInput
-            style={[styles.textInput, styles.textArea]}
+            style={[styles.textInput, styles.textArea, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
             placeholder="Describe tu receta"
             value={descripcion}
             onChangeText={setDescripcion}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={3}
             maxLength={500}
           />
-          <Text style={styles.counter}>{descripcion.length}/500</Text>
+          <Text style={[styles.counter, { color: colors.textSecondary }]}>{descripcion.length}/500</Text>
         </View>
 
         {/* Tiempo de preparación */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Tiempo de preparación (minutos)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tiempo de preparación (minutos)</Text>
           <View style={styles.tiempoContainer}>
             <TextInput
-              style={[styles.textInput, { flex: 1, marginRight: 8 }]}
+              style={[styles.textInput, { flex: 1, marginRight: 8, borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
               placeholder="Ej: 45"
               value={tiempo}
               onChangeText={setTiempo}
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="number-pad"
             />
-            <View style={styles.tiempoLabel}>
-              <Text style={styles.tiempoText}>min</Text>
+            <View style={[styles.tiempoLabel, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.tiempoText, { color: colors.textSecondary }]}>min</Text>
             </View>
           </View>
         </View>
 
         {/* Porciones */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Número de porciones</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Número de porciones</Text>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
             placeholder="Ej: 4"
             value={porciones}
             onChangeText={setPorciones}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             keyboardType="number-pad"
           />
         </View>
 
         {/* Dificultad */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Dificultad</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={dificultad}
-              onValueChange={setDificultad}
-              style={styles.picker}
-            >
-              <Picker.Item label="Fácil" value="Fácil" />
-              <Picker.Item label="Media" value="Media" />
-              <Picker.Item label="Difícil" value="Difícil" />
-            </Picker>
-          </View>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Dificultad</Text>
+          <TouchableOpacity
+            style={[styles.selectButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={() => setOpenSelect('dificultad')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.selectButtonText, { color: colors.text }]}>
+              {getLabelFromValue(DIFICULTADES, dificultad)}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         {/* Tipo de Dieta */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Categoría / Tipo de Dieta</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={tipoDieta}
-              onValueChange={setTipoDieta}
-              style={styles.picker}
-            >
-              <Picker.Item label="Mixta" value="mixta" />
-              <Picker.Item label="Vegana" value="vegana" />
-              <Picker.Item label="Vegetariana" value="vegetariana" />
-              <Picker.Item label="Carnes" value="carnes" />
-              <Picker.Item label="Gym" value="gym" />
-              <Picker.Item label="Bajar de Peso" value="bajar_peso" />
-            </Picker>
-          </View>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Categoría / Tipo de Dieta</Text>
+          <TouchableOpacity
+            style={[styles.selectButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={() => setOpenSelect('tipoDieta')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.selectButtonText, { color: colors.text }]}>
+              {getLabelFromValue(TIPOS_DIETA, tipoDieta)}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
+
+        {/* Modal selector (tema oscuro compatible) */}
+        <Modal
+          visible={openSelect !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpenSelect(null)}
+        >
+          <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+            <View style={[styles.modalCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {openSelect === 'dificultad' ? 'Selecciona dificultad' : 'Selecciona tipo de dieta'}
+                </Text>
+                <TouchableOpacity onPress={() => setOpenSelect(null)}>
+                  <MaterialCommunityIcons name="close" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {(openSelect === 'dificultad' ? DIFICULTADES : TIPOS_DIETA).map((item) => {
+                const selected = openSelect === 'dificultad' ? item.value === dificultad : item.value === tipoDieta;
+                return (
+                  <TouchableOpacity
+                    key={item.value}
+                    style={[
+                      styles.modalOption,
+                      {
+                        backgroundColor: selected ? colors.surface : 'transparent',
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      if (openSelect === 'dificultad') {
+                        setDificultad(item.value);
+                      } else {
+                        setTipoDieta(item.value);
+                      }
+                      setOpenSelect(null);
+                    }}
+                  >
+                    <Text style={[styles.modalOptionText, { color: colors.text }]}>{item.label}</Text>
+                    {selected && (
+                      <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </Modal>
 
         {/* Ingredientes */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Ingredientes (uno por línea)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Ingredientes (uno por línea)</Text>
           <TextInput
-            style={[styles.textInput, styles.textArea]}
+            style={[styles.textInput, styles.textArea, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
             placeholder="- 2 tazas de harina&#10;- 1 huevo&#10;- Sal al gusto"
             value={ingredientes}
             onChangeText={setIngredientes}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={4}
           />
@@ -351,13 +425,13 @@ export default function CrearRecetaScreen({ navigation }) {
 
         {/* Pasos */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Pasos de preparación (uno por línea)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Pasos de preparación (uno por línea)</Text>
           <TextInput
-            style={[styles.textInput, styles.textArea]}
+            style={[styles.textInput, styles.textArea, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
             placeholder="1. Mezclar ingredientes&#10;2. Cocinar a fuego medio&#10;3. Servir caliente"
             value={pasos}
             onChangeText={setPasos}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={5}
           />
@@ -373,7 +447,6 @@ export default function CrearRecetaScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -382,12 +455,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#000',
     flex: 1,
     textAlign: 'center',
   },
@@ -419,7 +490,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
   },
   fotoReceta: {
     width: '100%',
@@ -430,14 +500,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
     borderWidth: 2,
-    borderColor: '#D4AF37',
     borderStyle: 'dashed',
   },
   agregarFotoText: {
     marginTop: 8,
-    color: '#D4AF37',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -447,12 +514,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     marginBottom: 16,
-    backgroundColor: '#fff9e6',
     borderRadius: 8,
+    borderWidth: 1,
   },
   uploadingText: {
     marginLeft: 8,
-    color: '#D4AF37',
     fontSize: 14,
   },
   inputGroup: {
@@ -461,17 +527,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
     marginBottom: 8,
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#D4AF37',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#000',
   },
   textArea: {
     minHeight: 80,
@@ -481,7 +544,6 @@ const styles = StyleSheet.create({
   counter: {
     marginTop: 4,
     fontSize: 12,
-    color: '#999',
     textAlign: 'right',
   },
   tiempoContainer: {
@@ -490,7 +552,6 @@ const styles = StyleSheet.create({
   },
   tiempoLabel: {
     borderWidth: 1,
-    borderColor: '#D4AF37',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -498,19 +559,65 @@ const styles = StyleSheet.create({
     minWidth: 50,
   },
   tiempoText: {
-    color: '#666',
     fontSize: 14,
     fontWeight: '600',
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#D4AF37',
     borderRadius: 8,
     overflow: 'hidden',
   },
   picker: {
     width: '100%',
     height: 50,
+  },
+  selectButton: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  modalCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    maxHeight: '75%',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   spacer: {
     height: 24,

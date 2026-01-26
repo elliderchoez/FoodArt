@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -18,11 +18,14 @@ import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
 import { AdminService } from '../services/AdminService';
 import { SharingService } from '../services/SharingService';
+import { ReportModal } from '../components/ReportModal';
+import { ReportService } from '../services/ReportService';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -42,7 +45,7 @@ const PasoItem = ({ paso, index, colors }) => (
   </View>
 );
 
-const ComentarioItem = ({ comentario, colors }) => (
+const ComentarioItem = ({ comentario, colors, canReport = false, hasReported = false, onReport }) => (
   <View style={[styles.comentarioItem, { backgroundColor: colors.cardBackground }]}>
     <View style={styles.comentarioHeader}>
       <Image
@@ -62,6 +65,20 @@ const ComentarioItem = ({ comentario, colors }) => (
           ))}
         </View>
       </View>
+
+      {canReport ? (
+        <TouchableOpacity
+          onPress={onReport}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ paddingLeft: 10, paddingVertical: 2 }}
+        >
+          <MaterialCommunityIcons
+            name={hasReported ? 'flag' : 'flag-outline'}
+            size={20}
+            color={hasReported ? colors.error : colors.textSecondary}
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
     <Text style={[styles.comentarioText, { color: colors.textSecondary }]}>{comentario.contenido}</Text>
   </View>
@@ -88,8 +105,16 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [nuevaCalificacion, setNuevaCalificacion] = useState(0);
   const [mostrarModalResena, setMostrarModalResena] = useState(false);
   const [token, setToken] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [siguiendo, setSiguiendo] = useState(false);
   const [esMiReceta, setEsMiReceta] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [commentReporting, setCommentReporting] = useState(false);
+  const [commentToReport, setCommentToReport] = useState(null);
+  const [reportedCommentMap, setReportedCommentMap] = useState({});
   const [showAdminOptions, setShowAdminOptions] = useState(false);
   const [deletingReceta, setDeletingReceta] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -112,6 +137,15 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     const inicializar = async () => {
       const tk = await AsyncStorage.getItem('authToken');
       setToken(tk);
+
+      if (tk) {
+        try {
+          const { data: userData } = await apiClient.get(`/user`);
+          setCurrentUserId(userData?.id ?? null);
+        } catch (error) {
+          console.error('Error obteniendo usuario:', error);
+        }
+      }
       
       console.log('DetalleRecetaScreen inicializando - recetaId:', recetaId, 'receta:', receta?.id);
       
@@ -126,6 +160,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         if (tk) {
           try {
             const { data: userData } = await apiClient.get(`/user`);
+            setCurrentUserId(userData?.id ?? null);
             setEsMiReceta(userData.id === receta.user_id);
           } catch (error) {
             console.error('Error obteniendo usuario:', error);
@@ -139,6 +174,160 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     };
     inicializar();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const id = recetaCompleta?.id || receta?.id || recetaId;
+      if (!id) return;
+      // Al volver a la pantalla (o al enfocarla), refrescar para reflejar eliminaciones/bloqueos.
+      cargarDetalleReceta(token, id);
+      cargarComentarios(id);
+    }, [recetaCompleta?.id, receta?.id, recetaId, token])
+  );
+
+  useEffect(() => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    if (!id) return;
+
+    const key = `reported:receta:${id}`;
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (v === '1') setHasReported(true);
+      })
+      .catch(() => {});
+  }, [recetaCompleta?.id, receta?.id, recetaId]);
+
+  const recetaReportReasons = [
+    { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Lenguaje ofensivo, violencia, etc.' },
+    { key: 'spam', label: 'Spam', help: 'Publicidad o contenido repetitivo.' },
+    { key: 'falso', label: 'Información falsa', help: 'Datos engañosos o peligrosos.' },
+    { key: 'plagios', label: 'Plagio', help: 'Copia sin atribución.' },
+    { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+  ];
+
+  const commentReportReasons = useMemo(
+    () => [
+      { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Lenguaje ofensivo, insultos, etc.' },
+      { key: 'spam', label: 'Spam', help: 'Publicidad o contenido repetitivo.' },
+      { key: 'acoso', label: 'Acoso', help: 'Ataques o intimidación.' },
+      { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+    ],
+    []
+  );
+
+  const openReport = () => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const submitRecetaReport = async ({ reason, description }) => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    const key = id ? `reported:receta:${id}` : null;
+
+    try {
+      setReporting(true);
+      await ReportService.reportReceta(id, reason, description);
+      setHasReported(true);
+      if (key) {
+        await AsyncStorage.setItem(key, '1');
+      }
+      setShowReportModal(false);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      // Si el backend responde que ya existe, también lo marcamos como reportado.
+      const status = error?.response?.status;
+      if (status === 409) {
+        setHasReported(true);
+        if (key) {
+          try {
+            await AsyncStorage.setItem(key, '1');
+          } catch {}
+        }
+        setShowReportModal(false);
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  useEffect(() => {
+    const items = Array.isArray(comentarios) ? comentarios : [];
+    if (!items.length) {
+      setReportedCommentMap({});
+      return;
+    }
+
+    const keys = items
+      .map((c) => c?.id)
+      .filter(Boolean)
+      .map((id) => `reported:comentario:${id}`);
+
+    if (!keys.length) return;
+
+    AsyncStorage.multiGet(keys)
+      .then((pairs) => {
+        const next = {};
+        for (const [k, v] of pairs) {
+          if (v === '1') {
+            const idStr = (k || '').split(':').pop();
+            if (idStr) next[idStr] = true;
+          }
+        }
+        setReportedCommentMap(next);
+      })
+      .catch(() => {});
+  }, [comentarios]);
+
+  const openCommentReport = (comentario) => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    if (!comentario?.id) return;
+    setCommentToReport(comentario);
+    setShowCommentReportModal(true);
+  };
+
+  const submitCommentReport = async ({ reason, description }) => {
+    const comentarioId = commentToReport?.id;
+    if (!comentarioId) return;
+    const key = `reported:comentario:${comentarioId}`;
+
+    try {
+      setCommentReporting(true);
+      await ReportService.reportComentario(comentarioId, reason, description);
+      setReportedCommentMap((prev) => ({ ...prev, [String(comentarioId)]: true }));
+      try {
+        await AsyncStorage.setItem(key, '1');
+      } catch {}
+      setShowCommentReportModal(false);
+      setCommentToReport(null);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 409) {
+        setReportedCommentMap((prev) => ({ ...prev, [String(comentarioId)]: true }));
+        try {
+          await AsyncStorage.setItem(key, '1');
+        } catch {}
+        setShowCommentReportModal(false);
+        setCommentToReport(null);
+        return;
+      }
+      const msg = error?.response?.data?.message || error?.message || 'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setCommentReporting(false);
+    }
+  };
 
   const obtenerToken = async () => {
     const tk = await AsyncStorage.getItem('authToken');
@@ -263,7 +452,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       cargarDetalleReceta();
     } catch (error) {
       console.error('Error publicando comentario:', error);
-      Alert.alert('Error', 'No se pudo publicar el comentario');
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo publicar el comentario';
+      Alert.alert('Error', msg);
     }
   };
 
@@ -520,8 +713,39 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{recetaCompleta.titulo}</Text>
-        <View style={{ width: 28 }} />
+        {!esMiReceta && !isAdmin ? (
+          <TouchableOpacity onPress={openReport} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons
+              name={hasReported ? 'flag' : 'flag-outline'}
+              size={26}
+              color={hasReported ? colors.error : colors.text}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 28 }} />
+        )}
       </View>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Reportar receta"
+        reasons={recetaReportReasons}
+        submitting={reporting}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitRecetaReport}
+      />
+
+      <ReportModal
+        visible={showCommentReportModal}
+        title="Reportar comentario"
+        reasons={commentReportReasons}
+        submitting={commentReporting}
+        onClose={() => {
+          setShowCommentReportModal(false);
+          setCommentToReport(null);
+        }}
+        onSubmit={submitCommentReport}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Imagen */}
@@ -735,7 +959,15 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             <FlatList
               data={comentarios}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => <ComentarioItem comentario={item} colors={colors} />}
+              renderItem={({ item }) => (
+                <ComentarioItem
+                  comentario={item}
+                  colors={colors}
+                  canReport={!!token && !isAdmin && currentUserId != null && item?.user_id !== currentUserId}
+                  hasReported={!!reportedCommentMap?.[String(item?.id)]}
+                  onReport={() => openCommentReport(item)}
+                />
+              )}
               scrollEnabled={false}
             />
           )}

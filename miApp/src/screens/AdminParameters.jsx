@@ -17,7 +17,7 @@ import { AdminService } from '../services/AdminService';
 import { useTheme } from '../context/ThemeContext';
 
 export const AdminParameters = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const [parameters, setParameters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedParam, setSelectedParam] = useState(null);
@@ -114,9 +114,18 @@ export const AdminParameters = ({ navigation }) => {
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Configuración del Sistema</Text>
-        <TouchableOpacity onPress={loadParameters}>
-          <Icon name="refresh" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={loadParameters} style={{ marginLeft: 14 }}>
+            <Icon name="refresh" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Info */}

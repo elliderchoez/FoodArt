@@ -12,6 +12,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\ShoppingListController;
+use App\Http\Controllers\ReportController;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
@@ -33,7 +34,7 @@ Route::get('/usuarios/{id}/seguidores', [SeguidorController::class, 'obtenerSegu
 Route::get('/usuarios/{id}/siguiendo', [SeguidorController::class, 'obtenerSiguiendo']);
 
 // Rutas protegidas (requieren token)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'not_blocked'])->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
@@ -114,6 +115,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Filtros avanzados
     Route::get('/recetas/filtrar/avanzado', [UserController::class, 'filtrarRecetas']);
 
+    // ========== REPORTES (USUARIOS) ==========
+    Route::post('/reports/recetas/{recetaId}', [ReportController::class, 'reportReceta']);
+    Route::post('/reports/usuarios/{userId}', [ReportController::class, 'reportUsuario']);
+    Route::post('/reports/comentarios/{comentarioId}', [ReportController::class, 'reportComentario']);
+
 
     // ========== RUTAS DE ADMIN ==========
     Route::middleware('admin')->group(function () {
@@ -135,8 +141,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Reportes
         Route::get('/admin/reports', [AdminController::class, 'getReports']);
+        Route::get('/admin/reports/usuarios', [AdminController::class, 'getUserReports']);
+        Route::get('/admin/reports/comentarios', [AdminController::class, 'getCommentReports']);
         Route::post('/admin/reports', [AdminController::class, 'createReport']);
         Route::put('/admin/reports/{id}', [AdminController::class, 'resolveReport']);
+        Route::put('/admin/reports/usuarios/{id}', [AdminController::class, 'resolveUserReport']);
+        Route::put('/admin/reports/comentarios/{id}', [AdminController::class, 'resolveCommentReport']);
 
         // Logs
         Route::get('/admin/logs', [AdminController::class, 'getLogs']);

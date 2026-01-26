@@ -16,7 +16,7 @@ import { AdminService } from '../services/AdminService';
 import { useTheme } from '../context/ThemeContext';
 
 export const AdminBackups = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -146,14 +146,23 @@ export const AdminBackups = ({ navigation }) => {
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Gestión de Backups</Text>
-        <TouchableOpacity onPress={loadBackups} disabled={loading}>
-          <Icon
-            name="refresh"
-            size={24}
-            color="#fff"
-            style={{ opacity: loading ? 0.5 : 1 }}
-          />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={loadBackups} disabled={loading} style={{ marginLeft: 14 }}>
+            <Icon
+              name="refresh"
+              size={24}
+              color="#fff"
+              style={{ opacity: loading ? 0.5 : 1 }}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Info */}

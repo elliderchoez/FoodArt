@@ -29,6 +29,8 @@ class User extends Authenticatable
         'is_blocked',
         'blocked_at',
         'block_reason',
+        'comment_banned_until',
+        'comment_ban_reason',
         'email_verified',
         'email_verification_token',
         'password_reset_token',
@@ -57,6 +59,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_blocked' => 'boolean',
             'blocked_at' => 'datetime',
+            'comment_banned_until' => 'datetime',
             'email_verified' => 'boolean',
             'password_reset_expires' => 'datetime',
         ];

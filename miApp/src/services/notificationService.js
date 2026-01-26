@@ -210,3 +210,34 @@ export const getUnreadCount = async () => {
     return 0;
   }
 };
+
+// ====== Pop-up de advertencia (solo una vez) ======
+
+const buildWarningPopupStorageKey = (data = {}) => {
+  const reportId = data?.reportId ?? data?.report_id;
+  const notificationId = data?.notificationId ?? data?.notification_id;
+  const recetaId = data?.recetaId ?? data?.recipeId;
+  const comentarioId = data?.comentarioId ?? data?.comentario_id;
+  const action = data?.action ?? 'none';
+
+  if (reportId) return `warningPopupShown:report:${String(reportId)}`;
+  if (notificationId) return `warningPopupShown:notification:${String(notificationId)}`;
+
+  // Fallback razonable (por si no viene reportId)
+  return `warningPopupShown:fallback:${String(recetaId ?? 'x')}:${String(comentarioId ?? 'x')}:${String(action)}`;
+};
+
+// Devuelve true solo la primera vez para ese reporte/notificación.
+export const consumeWarningPopupOnce = async (data = {}) => {
+  try {
+    const key = buildWarningPopupStorageKey(data);
+    const existing = await AsyncStorage.getItem(key);
+    if (existing === '1') return false;
+    await AsyncStorage.setItem(key, '1');
+    return true;
+  } catch (error) {
+    console.error('Error consumiendo warning popup:', error);
+    // En caso de error, evitar spamear: no mostrar popup.
+    return false;
+  }
+};

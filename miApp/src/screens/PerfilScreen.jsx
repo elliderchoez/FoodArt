@@ -12,6 +12,7 @@ import {
   TextInput,
   Modal,
   Switch,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -169,32 +170,38 @@ export const PerfilScreen = ({ navigation }) => {
   };
 
   const cerrarSesion = async () => {
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        {
-          text: 'Cancelar',
-          onPress: () => {},
-          style: 'cancel',
-        },
-        {
-          text: 'Cerrar sesión',
-          onPress: async () => {
-            try {
-              await logout();
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              Alert.alert('Error', 'Error al cerrar sesión');
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    const doLogout = async () => {
+      try {
+        await logout();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      } catch (error) {
+        Alert.alert('Error', 'Error al cerrar sesión');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('¿Estás seguro de que quieres cerrar sesión?');
+      if (ok) {
+        await doLogout();
+      }
+      return;
+    }
+
+    Alert.alert('Cerrar sesión', '¿Estás seguro de que quieres cerrar sesión?', [
+      {
+        text: 'Cancelar',
+        onPress: () => {},
+        style: 'cancel',
+      },
+      {
+        text: 'Cerrar sesión',
+        onPress: doLogout,
+        style: 'destructive',
+      },
+    ]);
   };
 
   const guardarDescripcion = async () => {
@@ -401,11 +408,11 @@ export const PerfilScreen = ({ navigation }) => {
           {/* Descripción editable */}
           <View style={styles.descriptionContainer}>
             {editingDescription ? (
-              <View style={styles.editDescriptionBox}>
+              <View style={[styles.editDescriptionBox, { backgroundColor: colors.cardBackground, borderColor: colors.border }] }>
                 <TextInput
-                  style={styles.descriptionInput}
+                  style={[styles.descriptionInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                   placeholder="Añade una descripción..."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.textSecondary}
                   value={newDescription}
                   onChangeText={setNewDescription}
                   multiline
@@ -413,19 +420,19 @@ export const PerfilScreen = ({ navigation }) => {
                 />
                 <View style={styles.editDescriptionButtons}>
                   <TouchableOpacity
-                    style={styles.btnCancel}
+                    style={[styles.btnCancel, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => {
                       setEditingDescription(false);
                       setNewDescription(usuario.descripcion || '');
                     }}
                   >
-                    <Text style={styles.btnCancelText}>Cancelar</Text>
+                    <Text style={[styles.btnCancelText, { color: colors.text }]}>Cancelar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.btnSave}
+                    style={[styles.btnSave, { backgroundColor: colors.primary }]}
                     onPress={guardarDescripcion}
                   >
-                    <Text style={styles.btnSaveText}>Guardar</Text>
+                    <Text style={[styles.btnSaveText, { color: '#FFFFFF' }]}>Guardar</Text>
                   </TouchableOpacity>
                 </View>
               </View>

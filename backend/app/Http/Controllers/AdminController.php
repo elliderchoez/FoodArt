@@ -6,10 +6,15 @@ use App\Models\User;
 use App\Models\Receta;
 use App\Models\SystemLog;
 use App\Models\ReportReceta;
+use App\Models\ReportUsuario;
+use App\Models\ReportComentario;
+use App\Models\Notification;
 use App\Models\SystemParameter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use App\Services\ExpoNotificationService;
 
 class AdminController extends Controller
 {
@@ -63,7 +68,7 @@ class AdminController extends Controller
             'role' => $validated['role'] ?? 'usuario',
         ]);
 
-        $this->logAction(auth()->id(), 'crear_usuario', 'User', $usuario->id, "Nuevo usuario: {$usuario->email}");
+        $this->logAction(Auth::id(), 'crear_usuario', 'User', $usuario->id, "Nuevo usuario: {$usuario->email}");
 
         return response()->json([
             'message' => 'Usuario creado exitosamente',
@@ -78,10 +83,16 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin modifique cuentas admin de terceros.
+        if ($usuario->role === 'admin' && Auth::id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para modificar esta cuenta.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,' . $userId,
-            'role' => 'sometimes|in:usuario,admin',
             'descripcion' => 'sometimes|string',
         ]);
 
@@ -94,7 +105,7 @@ class AdminController extends Controller
 
         $usuario->update($validated);
 
-        $this->logAction(auth()->id(), 'editar_usuario', 'User', $usuario->id, "Editar usuario: {$usuario->email}", $changes);
+        $this->logAction(Auth::id(), 'editar_usuario', 'User', $usuario->id, "Editar usuario: {$usuario->email}", $changes);
 
         return response()->json([
             'message' => 'Usuario actualizado',
@@ -109,6 +120,13 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin bloquee cuentas admin de terceros.
+        if ($usuario->role === 'admin' && Auth::id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para bloquear esta cuenta.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'reason' => 'required|string|max:500',
         ]);
@@ -119,7 +137,7 @@ class AdminController extends Controller
             'block_reason' => $validated['reason'],
         ]);
 
-        $this->logAction(auth()->id(), 'bloquear_usuario', 'User', $usuario->id, "Bloqueado por: {$validated['reason']}");
+        $this->logAction(Auth::id(), 'bloquear_usuario', 'User', $usuario->id, "Bloqueado por: {$validated['reason']}");
 
         return response()->json([
             'message' => 'Usuario bloqueado',
@@ -134,13 +152,20 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin desbloquee cuentas admin de terceros.
+        if ($usuario->role === 'admin' && Auth::id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para desbloquear esta cuenta.'
+            ], 403);
+        }
+
         $usuario->update([
             'is_blocked' => false,
             'blocked_at' => null,
             'block_reason' => null,
         ]);
 
-        $this->logAction(auth()->id(), 'desbloquear_usuario', 'User', $usuario->id, "Usuario desbloqueado");
+        $this->logAction(Auth::id(), 'desbloquear_usuario', 'User', $usuario->id, "Usuario desbloqueado");
 
         return response()->json([
             'message' => 'Usuario desbloqueado',
@@ -154,9 +179,24 @@ class AdminController extends Controller
     public function deleteUsuario($userId)
     {
         $usuario = User::findOrFail($userId);
+
+        // Seguridad: evitar que un admin elimine cuentas admin de terceros.
+        if ($usuario->role === 'admin' && Auth::id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para eliminar esta cuenta.'
+            ], 403);
+        }
+
+        // Evitar auto-eliminación accidental.
+        if (Auth::id() === $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No puedes eliminar tu propia cuenta.'
+            ], 422);
+        }
+
         $email = $usuario->email;
 
-        $this->logAction(auth()->id(), 'eliminar_usuario', 'User', $usuario->id, "Usuario eliminado: {$email}");
+        $this->logAction(Auth::id(), 'eliminar_usuario', 'User', $usuario->id, "Usuario eliminado: {$email}");
 
         $usuario->delete();
 
@@ -172,6 +212,13 @@ class AdminController extends Controller
     {
         $usuario = User::findOrFail($userId);
 
+        // Seguridad: evitar que un admin resetee la contraseña de cuentas admin de terceros.
+        if ($usuario->role === 'admin' && Auth::id() !== $usuario->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para resetear la contraseña de esta cuenta.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'password' => 'required|string|min:8',
         ]);
@@ -180,7 +227,7 @@ class AdminController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        $this->logAction(auth()->id(), 'resetear_password', 'User', $usuario->id, "Contraseña reseteada");
+        $this->logAction(Auth::id(), 'resetear_password', 'User', $usuario->id, "Contraseña reseteada");
 
         return response()->json([
             'message' => 'Contraseña reseteada exitosamente'
@@ -231,7 +278,7 @@ class AdminController extends Controller
         $receta = Receta::findOrFail($recetaId);
         $titulo = $receta->titulo;
 
-        $this->logAction(auth()->id(), 'eliminar_receta', 'Receta', $receta->id, "Receta eliminada: {$titulo}");
+        $this->logAction(Auth::id(), 'eliminar_receta', 'Receta', $receta->id, "Receta eliminada: {$titulo}");
 
         $receta->delete();
 
@@ -267,7 +314,7 @@ class AdminController extends Controller
 
         $receta->update($validated);
 
-        $this->logAction(auth()->id(), 'editar_receta', 'Receta', $receta->id, "Receta actualizada: {$receta->titulo}", $changes);
+        $this->logAction(Auth::id(), 'editar_receta', 'Receta', $receta->id, "Receta actualizada: {$receta->titulo}", $changes);
 
         return response()->json([
             'message' => 'Receta actualizada',
@@ -291,7 +338,7 @@ class AdminController extends Controller
             'block_reason' => $validated['reason'],
         ]);
 
-        $this->logAction(auth()->id(), 'bloquear_receta', 'Receta', $receta->id, "Receta bloqueada: {$receta->titulo}", ['reason' => $validated['reason']]);
+        $this->logAction(Auth::id(), 'bloquear_receta', 'Receta', $receta->id, "Receta bloqueada: {$receta->titulo}", ['reason' => $validated['reason']]);
 
         return response()->json([
             'message' => 'Receta bloqueada',
@@ -311,7 +358,7 @@ class AdminController extends Controller
             'block_reason' => null,
         ]);
 
-        $this->logAction(auth()->id(), 'desbloquear_receta', 'Receta', $receta->id, "Receta desbloqueada: {$receta->titulo}", []);
+        $this->logAction(Auth::id(), 'desbloquear_receta', 'Receta', $receta->id, "Receta desbloqueada: {$receta->titulo}", []);
 
         return response()->json([
             'message' => 'Receta desbloqueada',
@@ -333,6 +380,10 @@ class AdminController extends Controller
         }
 
         $reports = $query->orderBy('created_at', 'desc')->paginate(15);
+        $reports->getCollection()->transform(function ($report) {
+            $report->type = 'receta';
+            return $report;
+        });
 
         return response()->json([
             'message' => 'Reportes obtenidos',
@@ -345,42 +396,588 @@ class AdminController extends Controller
      */
     public function resolveReport(Request $request, $reportId)
     {
-        $report = ReportReceta::findOrFail($reportId);
+        $report = ReportReceta::with(['receta.user', 'usuario'])->findOrFail($reportId);
 
         $validated = $request->validate([
             'status' => 'required|in:revisado,rechazado,resuelto',
-            'response' => 'required|string|max:1000',
-            'action' => 'sometimes|in:delete_receta,block_user,none',
+            'response' => 'nullable|string|max:1000',
+            // Compat: block_user (legacy) => bloquear autor de la receta
+            'action' => 'sometimes|in:delete_receta,block_recipe,block_recipe_author,mute_recipe_author_7d,mute_recipe_author_30d,warn_recipe_author,block_user,none',
         ]);
 
-        $report->update([
-            'status' => $validated['status'],
-            'admin_response' => $validated['response'],
-            'reviewed_by' => auth()->id(),
-            'reviewed_at' => now(),
-        ]);
+        // Validaciones de acciones antes de escribir cambios.
+        $action = $validated['action'] ?? 'none';
+        $receta = $report->receta;
+        $autor = optional($receta)->user;
 
-        // Ejecutar acción si es necesaria
-        if (isset($validated['action'])) {
-            if ($validated['action'] === 'delete_receta') {
-                $report->receta->delete();
-                $this->logAction(auth()->id(), 'eliminar_receta_reporte', 'Receta', $report->receta_id, "Receta eliminada por reporte");
-            } elseif ($validated['action'] === 'block_user') {
-                $report->usuario->update([
-                    'is_blocked' => true,
-                    'blocked_at' => now(),
-                    'block_reason' => 'Bloqueado por violar políticas',
-                ]);
-                $this->logAction(auth()->id(), 'bloquear_usuario_reporte', 'User', $report->usuario_id, "Usuario bloqueado por reporte");
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+        $defaultResponse = $this->buildDefaultModerationMessage('receta', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
+
+        if (in_array($action, ['block_recipe', 'delete_receta'], true) && !$receta) {
+            return response()->json([
+                'message' => 'La receta asociada no existe.'
+            ], 422);
+        }
+
+        if (in_array($action, ['block_recipe_author', 'block_user', 'warn_recipe_author'], true) && !$autor) {
+            return response()->json([
+                'message' => 'No se pudo determinar el autor de la receta.'
+            ], 422);
+        }
+
+        if (in_array($action, ['block_recipe_author', 'block_user', 'warn_recipe_author'], true) && $autor) {
+            if ($autor->role === 'admin' && Auth::id() !== $autor->getKey()) {
+                return response()->json([
+                    'message' => 'No autorizado para moderar esta cuenta.'
+                ], 403);
             }
         }
 
-        $this->logAction(auth()->id(), 'resolver_reporte', 'Report', $report->id, "Reporte resuelto: {$validated['status']}");
+        $report->update([
+            'status' => $status,
+            'admin_response' => $responseText,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        // Enviar advertencia al autor SIEMPRE que el reporte quede resuelto.
+        // (Independiente de si se bloquea/elimina la receta o se bloquea el autor.)
+        if (($status ?? null) === 'resuelto' && $autor) {
+            $this->notifyUser(
+                $autor,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'recetaId' => $report->receta_id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_autor_receta', 'User', $autor->getKey(), 'Advertencia enviada por reporte (auto)');
+        }
+
+        // Ejecutar acción si es necesaria
+        if ($action !== 'none') {
+
+            if ($action === 'delete_receta') {
+                $recetaId = $report->receta_id;
+                $recetaTitulo = optional($report->receta)->titulo;
+                optional($report->receta)->delete();
+                $this->logAction(Auth::id(), 'eliminar_receta_reporte', 'Receta', $recetaId, 'Receta eliminada por reporte', [
+                    'titulo' => $recetaTitulo,
+                ]);
+            } elseif ($action === 'block_recipe') {
+                if ($report->receta) {
+                    $report->receta->update([
+                        'is_blocked' => true,
+                        'block_reason' => 'Bloqueada por reporte (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'bloquear_receta_reporte', 'Receta', $report->receta_id, 'Receta bloqueada por reporte');
+                }
+            } elseif ($action === 'warn_recipe_author') {
+                if ($autor) {
+                    $this->notifyUser(
+                        $autor,
+                        'warning',
+                        '⚠️ Advertencia de moderación',
+                        'Tu receta fue reportada y un administrador emitió una advertencia. Revisa las políticas de la comunidad.',
+                        $report->receta_id,
+                        Auth::id(),
+                        [
+                            'reason' => $report->reason,
+                            'reportId' => $report->id,
+                        ]
+                    );
+                    $this->logAction(Auth::id(), 'advertencia_autor_receta', 'User', $autor->getKey(), 'Advertencia enviada por reporte');
+                }
+            } elseif ($action === 'block_recipe_author' || $action === 'block_user') {
+                // IMPORTANTE: usuario del reporte = reportante. Aquí queremos moderar al autor de la receta.
+                if ($autor) {
+                    $autor->update([
+                        'is_blocked' => true,
+                        'blocked_at' => now(),
+                        'block_reason' => 'Bloqueado por reporte (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'bloquear_autor_receta_reporte', 'User', $autor->getKey(), 'Autor bloqueado por reporte');
+                }
+            } elseif ($action === 'mute_recipe_author_7d' || $action === 'mute_recipe_author_30d') {
+                if ($autor) {
+                    $days = $action === 'mute_recipe_author_7d' ? 7 : 30;
+                    $autor->update([
+                        'comment_banned_until' => now()->addDays($days),
+                        'comment_ban_reason' => 'Prohibido comentar por reporte (moderación)',
+                    ]);
+                    $this->logAction(Auth::id(), 'prohibir_comentar_autor_receta', 'User', $autor->getKey(), 'Autor con prohibición de comentar', [
+                        'days' => $days,
+                    ]);
+                }
+            }
+        }
+
+        // Notificar al usuario que reportó
+        if ($report->usuario) {
+            $tituloReceta = $receta ? ($receta->titulo ?? 'una receta') : 'una receta';
+            $status = $status;
+
+            $this->notifyUser(
+                $report->usuario,
+                'report_reviewed',
+                '📣 Tu reporte fue revisado',
+                'Tu reporte sobre "' . $tituloReceta . '" fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'status' => $status,
+                    'reportId' => $report->id,
+                ]
+            );
+        }
+
+        $this->logAction(Auth::id(), 'resolver_reporte', 'Report', $report->id, "Reporte resuelto: {$validated['status']}");
 
         return response()->json([
             'message' => 'Reporte resuelto',
             'data' => $report
         ]);
+    }
+
+    /**
+     * Obtener reportes de usuarios
+     */
+    public function getUserReports(Request $request)
+    {
+        $query = ReportUsuario::with(['reportedUser', 'reporter', 'reviewedBy']);
+
+        if ($request->has('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $reports = $query->orderBy('created_at', 'desc')->paginate(15);
+        $reports->getCollection()->transform(function ($report) {
+            $report->type = 'usuario';
+            return $report;
+        });
+
+        return response()->json([
+            'message' => 'Reportes de usuario obtenidos',
+            'data' => $reports
+        ]);
+    }
+
+    /**
+     * Obtener reportes de comentarios
+     */
+    public function getCommentReports(Request $request)
+    {
+        $query = ReportComentario::with(['comentario.user', 'receta', 'reportedUser', 'reporter', 'reviewedBy']);
+
+        if ($request->has('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $reports = $query->orderBy('created_at', 'desc')->paginate(15);
+        $reports->getCollection()->transform(function ($report) {
+            $report->type = 'comentario';
+            return $report;
+        });
+
+        return response()->json([
+            'message' => 'Reportes de comentarios obtenidos',
+            'data' => $reports
+        ]);
+    }
+
+    /**
+     * Resolver reporte de comentario
+     */
+    public function resolveCommentReport(Request $request, $reportId)
+    {
+        $report = ReportComentario::with(['comentario.receta', 'comentario.user', 'reportedUser', 'reporter'])->findOrFail($reportId);
+
+        $validated = $request->validate([
+            'status' => 'required|in:revisado,rechazado,resuelto',
+            'response' => 'nullable|string|max:1000',
+            'action' => 'sometimes|in:delete_comentario,block_comment_author,mute_comment_author_7d,mute_comment_author_30d,none',
+        ]);
+
+        $action = $validated['action'] ?? 'none';
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+
+        $defaultResponse = $this->buildDefaultModerationMessage('comentario', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
+
+        $reportedUser = $report->reportedUser;
+        if (in_array($action, ['block_comment_author'], true) && !$reportedUser) {
+            return response()->json([
+                'message' => 'El usuario del comentario no existe.'
+            ], 422);
+        }
+
+        if ($reportedUser && $reportedUser->role === 'admin' && Auth::id() !== $reportedUser->getKey()) {
+            return response()->json([
+                'message' => 'No autorizado para moderar esta cuenta.'
+            ], 403);
+        }
+
+        $report->update([
+            'status' => $status,
+            'admin_response' => $responseText,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        $deleteReportedComment = function () use ($report) {
+            $comentario = $report->comentario;
+            if (!$comentario) {
+                return;
+            }
+
+            $recetaId = $comentario->receta_id;
+            $comentarioId = $comentario->getKey();
+
+            $comentario->delete();
+
+            if ($recetaId) {
+                Receta::where('id', $recetaId)
+                    ->where('comentarios_count', '>', 0)
+                    ->decrement('comentarios_count');
+            }
+
+            $this->logAction(Auth::id(), 'eliminar_comentario_reporte', 'Comentario', $comentarioId, 'Comentario eliminado por reporte');
+        };
+
+        // Advertencia automática al autor del comentario cuando queda resuelto.
+        if (($status ?? null) === 'resuelto' && $reportedUser) {
+            $this->notifyUser(
+                $reportedUser,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'comentarioId' => $report->comentario_id,
+                    'recetaId' => $report->receta_id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_autor_comentario', 'User', $reportedUser->getKey(), 'Advertencia enviada por reporte de comentario (auto)');
+        }
+
+        // Ejecutar acción
+        if ($action !== 'none') {
+            if ($action === 'delete_comentario') {
+                $deleteReportedComment();
+            } elseif ($action === 'block_comment_author') {
+                if ($reportedUser) {
+                    $reportedUser->update([
+                        'is_blocked' => true,
+                        'blocked_at' => now(),
+                        'block_reason' => 'Bloqueado por reporte de comentario (moderación)',
+                    ]);
+
+                    // Si se bloquea al autor, también se elimina el comentario reportado.
+                    $deleteReportedComment();
+
+                    $this->logAction(Auth::id(), 'bloquear_autor_comentario_reporte', 'User', $reportedUser->getKey(), 'Autor del comentario bloqueado por reporte');
+                }
+            } elseif ($action === 'mute_comment_author_7d' || $action === 'mute_comment_author_30d') {
+                if ($reportedUser) {
+                    $days = $action === 'mute_comment_author_7d' ? 7 : 30;
+                    $reportedUser->update([
+                        'comment_banned_until' => now()->addDays($days),
+                        'comment_ban_reason' => 'Prohibido comentar por reporte de comentario (moderación)',
+                    ]);
+
+                    // Si se prohíbe comentar, también se elimina el comentario reportado.
+                    $deleteReportedComment();
+
+                    $this->logAction(Auth::id(), 'prohibir_comentar_autor_comentario', 'User', $reportedUser->getKey(), 'Autor del comentario con prohibición de comentar', [
+                        'days' => $days,
+                    ]);
+                }
+            }
+        }
+
+        // Notificar al usuario que reportó
+        if ($report->reporter) {
+            $this->notifyUser(
+                $report->reporter,
+                'report_reviewed',
+                '📣 Tu reporte fue revisado',
+                'Tu reporte de un comentario fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
+                $report->receta_id,
+                Auth::id(),
+                [
+                    'status' => $status,
+                    'reportId' => $report->id,
+                    'comentarioId' => $report->comentario_id,
+                ]
+            );
+        }
+
+        $this->logAction(Auth::id(), 'resolver_reporte_comentario', 'ReportComentario', $report->id, 'Reporte de comentario resuelto', [
+            'status' => $validated['status'],
+            'action' => $validated['action'] ?? 'none',
+        ]);
+
+        return response()->json([
+            'message' => 'Reporte de comentario resuelto',
+            'data' => $report
+        ]);
+    }
+
+    /**
+     * Resolver reporte de usuario
+     */
+    public function resolveUserReport(Request $request, $reportId)
+    {
+        $report = ReportUsuario::with(['reportedUser', 'reporter'])->findOrFail($reportId);
+
+        $validated = $request->validate([
+            'status' => 'required|in:revisado,rechazado,resuelto',
+            'response' => 'nullable|string|max:1000',
+            'action' => 'sometimes|in:block_reported_user,mute_reported_user_7d,mute_reported_user_30d,warn_reported_user,none',
+        ]);
+
+        $action = $validated['action'] ?? 'none';
+        $status = $validated['status'];
+        $reasonLabel = $this->reasonLabel($report->reason);
+        $defaultResponse = $this->buildDefaultModerationMessage('usuario', $status, $reasonLabel, $action);
+        $responseText = trim((string)($validated['response'] ?? ''));
+        if ($responseText === '') {
+            $responseText = $defaultResponse;
+        }
+
+        if (in_array($action, ['block_reported_user', 'warn_reported_user'], true)) {
+            $user = $report->reportedUser;
+            if (!$user) {
+                return response()->json([
+                    'message' => 'El usuario reportado no existe.'
+                ], 422);
+            }
+
+            if ($user->role === 'admin' && Auth::id() !== $user->getKey()) {
+                return response()->json([
+                    'message' => 'No autorizado para moderar esta cuenta.'
+                ], 403);
+            }
+        }
+
+        $report->update([
+            'status' => $status,
+            'admin_response' => $responseText,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        // Enviar advertencia SIEMPRE que el reporte quede resuelto.
+        if (($status ?? null) === 'resuelto' && $report->reportedUser) {
+            $this->notifyUser(
+                $report->reportedUser,
+                'warning',
+                '⚠️ Advertencia de moderación',
+                $responseText,
+                null,
+                Auth::id(),
+                [
+                    'reason' => $report->reason,
+                    'reason_label' => $reasonLabel,
+                    'reportId' => $report->id,
+                    'action' => $action,
+                    'status' => $status,
+                ]
+            );
+
+            $this->logAction(Auth::id(), 'advertencia_usuario_reportado', 'User', $report->reportedUser->getKey(), 'Advertencia enviada por reporte de usuario (auto)');
+        }
+
+        if ($action === 'warn_reported_user') {
+            $user = $report->reportedUser;
+            if ($user) {
+                $this->notifyUser(
+                    $user,
+                    'warning',
+                    '⚠️ Advertencia de moderación',
+                    'Tu cuenta fue reportada y un administrador emitió una advertencia. Revisa las políticas de la comunidad.',
+                    null,
+                    Auth::id(),
+                    [
+                        'reason' => $report->reason,
+                        'reportId' => $report->id,
+                    ]
+                );
+                $this->logAction(Auth::id(), 'advertencia_usuario_reportado', 'User', $user->getKey(), 'Advertencia enviada por reporte de usuario');
+            }
+        } elseif ($action === 'block_reported_user') {
+            $user = $report->reportedUser;
+            if ($user) {
+                $user->update([
+                    'is_blocked' => true,
+                    'blocked_at' => now(),
+                    'block_reason' => 'Bloqueado por reporte (moderación)',
+                ]);
+
+                $this->logAction(Auth::id(), 'bloquear_usuario_reportado', 'User', $user->getKey(), 'Usuario reportado bloqueado');
+            }
+        } elseif ($action === 'mute_reported_user_7d' || $action === 'mute_reported_user_30d') {
+            $user = $report->reportedUser;
+            if ($user) {
+                $days = $action === 'mute_reported_user_7d' ? 7 : 30;
+                $user->update([
+                    'comment_banned_until' => now()->addDays($days),
+                    'comment_ban_reason' => 'Prohibido comentar por reporte (moderación)',
+                ]);
+                $this->logAction(Auth::id(), 'prohibir_comentar_usuario_reportado', 'User', $user->getKey(), 'Usuario reportado con prohibición de comentar', [
+                    'days' => $days,
+                ]);
+            }
+        }
+
+        // Notificar al usuario que reportó
+        if ($report->reporter) {
+            $reportedName = $report->reportedUser->name ?? 'un usuario';
+            $status = $status;
+
+            $this->notifyUser(
+                $report->reporter,
+                'report_reviewed',
+                '📣 Tu reporte fue revisado',
+                'Tu reporte sobre "' . $reportedName . '" fue revisado. Gracias por ayudarnos a mantener la comunidad segura.',
+                null,
+                Auth::id(),
+                [
+                    'status' => $status,
+                    'reportId' => $report->id,
+                ]
+            );
+        }
+
+        $this->logAction(Auth::id(), 'resolver_reporte_usuario', 'ReportUsuario', $report->id, 'Reporte de usuario resuelto', [
+            'status' => $validated['status'],
+            'action' => $validated['action'] ?? 'none',
+        ]);
+
+        return response()->json([
+            'message' => 'Reporte de usuario resuelto',
+            'data' => $report
+        ]);
+    }
+
+    private function reasonLabel($reason)
+    {
+        switch ($reason) {
+            case 'inapropiado':
+                return 'Contenido inapropiado';
+            case 'spam':
+                return 'Spam';
+            case 'falso':
+                return 'Información falsa';
+            case 'plagios':
+                return 'Plagio';
+            case 'acoso':
+                return 'Acoso';
+            case 'suplantacion':
+                return 'Suplantación';
+            case 'otro':
+            default:
+                return 'Otro';
+        }
+    }
+
+    private function buildDefaultModerationMessage($type, $status, $reasonLabel, $action)
+    {
+        // Mensaje predeterminado para el usuario afectado.
+        // Nota: el "status" se guarda para trazabilidad, pero el mensaje solo se usa como advertencia cuando status=resuelto.
+        $subject = $type === 'receta'
+            ? 'Tu receta fue reportada.'
+            : ($type === 'comentario'
+                ? 'Tu comentario fue reportado.'
+                : 'Tu cuenta fue reportada.');
+
+        $measure = 'Sin medidas adicionales.';
+
+        if ($type === 'receta') {
+            switch ($action) {
+                case 'delete_receta':
+                    $measure = 'Medida: tu receta fue eliminada.';
+                    break;
+                case 'block_recipe':
+                    $measure = 'Medida: tu receta fue bloqueada.';
+                    break;
+                case 'block_recipe_author':
+                case 'block_user':
+                    $measure = 'Medida: tu cuenta fue bloqueada.';
+                    break;
+                case 'mute_recipe_author_7d':
+                    $measure = 'Medida: no podrás comentar durante 7 días.';
+                    break;
+                case 'mute_recipe_author_30d':
+                    $measure = 'Medida: no podrás comentar durante 30 días.';
+                    break;
+                case 'none':
+                default:
+                    $measure = 'Medida: sin acciones adicionales.';
+            }
+        } else {
+            if ($type === 'comentario') {
+                switch ($action) {
+                    case 'delete_comentario':
+                        $measure = 'Medida: tu comentario fue eliminado.';
+                        break;
+                    case 'block_comment_author':
+                        $measure = 'Medida: tu cuenta fue bloqueada.';
+                        break;
+                    case 'mute_comment_author_7d':
+                        $measure = 'Medida: no podrás comentar durante 7 días. Tu comentario fue eliminado.';
+                        break;
+                    case 'mute_comment_author_30d':
+                        $measure = 'Medida: no podrás comentar durante 30 días. Tu comentario fue eliminado.';
+                        break;
+                    case 'none':
+                    default:
+                        $measure = 'Medida: sin acciones adicionales.';
+                }
+            } else {
+                switch ($action) {
+                    case 'block_reported_user':
+                        $measure = 'Medida: tu cuenta fue bloqueada.';
+                        break;
+                    case 'mute_reported_user_7d':
+                        $measure = 'Medida: no podrás comentar durante 7 días.';
+                        break;
+                    case 'mute_reported_user_30d':
+                        $measure = 'Medida: no podrás comentar durante 30 días.';
+                        break;
+                    case 'none':
+                    default:
+                        $measure = 'Medida: sin acciones adicionales.';
+                }
+            }
+        }
+
+        return $subject . ' Motivo: ' . $reasonLabel . '. ' . $measure;
     }
 
     /**
@@ -397,7 +994,7 @@ class AdminController extends Controller
 
         $report = ReportReceta::create($validated);
 
-        $this->logAction(auth()->id(), 'crear_reporte', 'Report', $report->id, "Nuevo reporte creado");
+        $this->logAction(Auth::id(), 'crear_reporte', 'Report', $report->id, "Nuevo reporte creado");
 
         return response()->json([
             'message' => 'Reporte creado',
@@ -474,10 +1071,10 @@ class AdminController extends Controller
         $parameter->update([
             'value' => $validated['value'],
             'description' => $validated['description'] ?? $parameter->description,
-            'updated_by' => auth()->id(),
+            'updated_by' => Auth::id(),
         ]);
 
-        $this->logAction(auth()->id(), 'actualizar_parametro', 'SystemParameter', $parameter->id,
+        $this->logAction(Auth::id(), 'actualizar_parametro', 'SystemParameter', $parameter->id,
             "Parámetro {$parameter->key} actualizado",
             ['key' => $parameter->key, 'old' => $oldValue, 'new' => $validated['value']]
         );
@@ -505,10 +1102,10 @@ class AdminController extends Controller
             'value' => $validated['value'],
             'description' => $validated['description'] ?? null,
             'type' => $validated['type'] ?? 'string',
-            'updated_by' => auth()->id(),
+            'updated_by' => Auth::id(),
         ]);
 
-        $this->logAction(auth()->id(), 'crear_parametro', 'SystemParameter', $parameter->id, "Nuevo parámetro: {$parameter->key}");
+        $this->logAction(Auth::id(), 'crear_parametro', 'SystemParameter', $parameter->id, "Nuevo parámetro: {$parameter->key}");
 
         return response()->json([
             'message' => 'Parámetro creado',
@@ -544,7 +1141,7 @@ class AdminController extends Controller
             exec($command, $output, $exitCode);
 
             if ($exitCode === 0) {
-                $this->logAction(auth()->id(), 'crear_backup', 'Database', null, "Backup creado: {$filename}");
+                $this->logAction(Auth::id(), 'crear_backup', 'Database', null, "Backup creado: {$filename}");
 
                 return response()->json([
                     'message' => 'Backup creado exitosamente',
@@ -635,5 +1232,32 @@ class AdminController extends Controller
             'changes' => $changes,
             'ip_address' => request()->ip(),
         ]);
+    }
+
+    private function notifyUser(User $toUser, string $type, string $title, string $body, ?int $recipeId = null, ?int $fromUserId = null, array $data = [])
+    {
+        $notification = Notification::create([
+            'user_id' => $toUser->getKey(),
+            'from_user_id' => $fromUserId,
+            'type' => $type,
+            'title' => $title,
+            'body' => $body,
+            'recipe_id' => $recipeId,
+            'read' => false,
+        ]);
+
+        $payload = array_merge([
+            'type' => $type,
+            'recipeId' => $recipeId,
+            'userId' => $fromUserId,
+            'notificationId' => $notification->id,
+        ], $data);
+
+        ExpoNotificationService::sendNotification(
+            $toUser->expo_push_token ?? null,
+            $title,
+            $body,
+            $payload
+        );
     }
 }
