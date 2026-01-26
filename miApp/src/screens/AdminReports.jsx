@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -127,6 +128,18 @@ export const AdminReports = ({ navigation }) => {
         refreshIntervalRef.current = null;
       }
     };
+  }, [showModal]);
+
+  // Manejar botón de atrás del dispositivo
+  useEffect(() => {
+    if (Platform.OS === 'android' && showModal) {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        setShowModal(false);
+        return true;
+      });
+
+      return () => backHandler.remove();
+    }
   }, [showModal]);
 
   const loadReports = async (options = {}) => {
@@ -754,6 +767,7 @@ export const AdminReports = ({ navigation }) => {
 
           {selectedReport && (
             <ScrollView style={styles.modalContent}>
+              {selectedReport && console.log('Selected Report (user):', selectedReport)}
               {/* Status Badge */}
               <View
                 style={[
@@ -818,14 +832,22 @@ export const AdminReports = ({ navigation }) => {
                 <View style={styles.infoRow}>
                   <Icon name="account" size={18} color={colors.primary} />
                   <Text style={[styles.infoLabel, { color: colors.text }]}>
-                    {selectedReport.reportedUser?.name || 'Usuario'}
+                    {selectedReport.reportedUser?.name 
+                      || selectedReport.usuario?.name 
+                      || selectedReport.user?.name
+                      || selectedReport.reported_user?.name
+                      || 'Usuario'}
                   </Text>
                 </View>
 
                 <View style={styles.infoRow}>
                   <Icon name="email" size={18} color={colors.primary} />
                   <Text style={[styles.infoLabel, { color: colors.text }]}>
-                    {selectedReport.reportedUser?.email || '—'}
+                    {selectedReport.reportedUser?.email 
+                      || selectedReport.usuario?.email 
+                      || selectedReport.user?.email
+                      || selectedReport.reported_user?.email
+                      || '—'}
                   </Text>
                 </View>
               </View>
