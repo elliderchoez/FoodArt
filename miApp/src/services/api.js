@@ -1,6 +1,6 @@
 // Configuración de la API
 // Cambia la IP según la red local:
-export const API_URL = 'http://192.168.100.11:8000/api';
+export const API_URL = 'http://192.168.100.103:8000/api';
 
 export const apiCall = async (endpoint, options = {}) => {
   const AsyncStorage = require('@react-native-async-storage/async-storage').default;

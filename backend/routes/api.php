@@ -12,6 +12,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\ShoppingListController;
+use Illuminate\Support\Facades\Http;
 
 // Rutas públicas de autenticación
 Route::post('/register', [AuthController::class, 'register']);
@@ -153,5 +154,34 @@ Route::middleware('auth:sanctum')->group(function () {
         // Estadísticas
         Route::get('/admin/statistics', [AdminController::class, 'getStatistics']);
     });
+});
+
+// Validación de imagen de comida usando Hugging Face
+Route::post('/validate-food-image', function (Request $request) {
+    $request->validate([
+        'image' => 'required|string', // base64
+    ]);
+
+    $imageBase64 = $request->input('image');
+    $imageData = base64_decode($imageBase64);
+
+    // Llama a un modelo público de Hugging Face Spaces (ejemplo: food-classification)
+    $response = Http::attach('file', $imageData, 'image.jpg')
+        ->post('https://hf.space/embed/akhaliq/food-classification/+/api/predict');
+
+    if ($response->failed()) {
+        return response()->json(['success' => false, 'message' => 'Error al validar imagen'], 500);
+    }
+
+    $result = $response->json();
+    // El modelo devuelve una lista de etiquetas, buscamos "food" o similar
+    $labels = $result['data'][0]['label'] ?? '';
+    $isFood = stripos($labels, 'food') !== false;
+
+    return response()->json([
+        'success' => $isFood,
+        'label' => $labels,
+        'raw' => $result,
+    ]);
 });
 

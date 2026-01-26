@@ -18,6 +18,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../services/apiClient';
+import { validateFoodImage } from '../services/foodDetectionService';
 
 export default function CrearRecetaScreen({ navigation }) {
   const [titulo, setTitulo] = useState('');
@@ -138,6 +139,17 @@ export default function CrearRecetaScreen({ navigation }) {
 
     try {
       setLoading(true);
+
+      // Validar imagen de comida antes de subir
+      const validacion = await validateFoodImage(imagenUri);
+      if (!validacion.isValid) {
+        Alert.alert(
+          'Error: Imagen no válida',
+          'Por favor, sube una foto de comida. No se permiten imágenes que no sean de alimentos.'
+        );
+        setLoading(false);
+        return;
+      }
 
       // Subir imagen
       const imageUrl = await subirImagen(imagenUri);
