@@ -1,5 +1,6 @@
 // Configuración de la API
 // Cambia la IP según la red local:
+
 export const API_URL = 'http://192.168.100.29:8000/api';
 
 export const apiCall = async (endpoint, options = {}) => {

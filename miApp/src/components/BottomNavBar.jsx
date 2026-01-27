@@ -76,10 +76,10 @@ export const BottomNavBar = ({ navigation: navigationProp, currentRoute, colors:
         isActive={currentRoute === 'Home'}
       />
       <NavButton
-        icon="magnify"
-        onPress={() => handleNavigation('Buscar')}
+        icon="calendar-outline"
+        onPress={() => handleNavigation('PlanComidas')}
         colors={colors}
-        isActive={currentRoute === 'Buscar'}
+        isActive={currentRoute === 'PlanComidas'}
       />
       <NavButton
         icon="calendar-outline"
@@ -92,13 +92,6 @@ export const BottomNavBar = ({ navigation: navigationProp, currentRoute, colors:
         onPress={() => handleNavigation('CrearReceta')}
         colors={colors}
         isActive={currentRoute === 'CrearReceta'}
-      />
-      <NavButtonWithBadge
-        icon="bell-outline"
-        onPress={() => handleNavigation('Alertas')}
-        colors={colors}
-        badgeCount={notificationCount}
-        isActive={currentRoute === 'Alertas'}
       />
       <NavButton
         icon="message-outline"

@@ -345,26 +345,28 @@ export const HomeScreen = ({ navigation }) => {
         {/* Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>FOOD ART</Text>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.headerButton} 
+              onPress={() => navigation.navigate('Buscar')}
+            >
+              <Icon name="magnify" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.headerButton} 
+              onPress={() => navigation.navigate('Alertas')}
+            >
+              <Icon name="bell-outline" size={24} color={colors.text} />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {/* Categorías */}
-        <FlatList
-          data={catList}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id.toString()}
-          renderItem={({ item }) => (
-            <CategoriaItem 
-              categoria={item}
-              colors={colors}
-              onPress={() => seleccionarCategoria(item.nombre)}
-            />
-          )}
-          style={styles.categoriasList}
-          contentContainerStyle={styles.categoriasContainer}
-        />
-
-        <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
 
         {/* Feed */}
         {loading ? (
@@ -432,11 +434,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 50,
-    justifyContent: 'center',
+    height: 56,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 0,
+    paddingHorizontal: 16,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   headerTitle: {
     fontSize: 24,
