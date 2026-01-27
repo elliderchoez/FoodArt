@@ -17,7 +17,8 @@ const NavButtonWithBadge = ({ icon, onPress, colors, badgeCount, isActive }) => 
       />
     </TouchableOpacity>
     {badgeCount > 0 && (
-      <View style={styles.badge}>
+      <View style={[styles.badge, { borderColor: colors.cardBackground }]}
+      >
         <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
       </View>
     )}
@@ -48,7 +49,16 @@ export const AdminBottomNavBar = ({ navigation, currentRoute, colors }) => {
   };
 
   return (
-    <View style={styles.bottomNav}>
+    <View
+      style={[
+        styles.bottomNav,
+        {
+          backgroundColor: colors.cardBackground,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+        },
+      ]}
+    >
       <NavButton
         icon="home-outline"
         onPress={() => handleNavigation('Home')}
@@ -87,7 +97,6 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     height: 56,
-    backgroundColor: '#FFFFFF',
     borderTopWidth: 0,
     elevation: 0,
     shadowColor: 'transparent',
@@ -114,7 +123,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: 'transparent',
   },
   badgeText: {
     color: '#FFFFFF',

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -20,7 +21,7 @@ const screenWidth = Dimensions.get('window').width;
 
 export const AdminDashboard = ({ navigation }) => {
   const { logout, user } = useAppContext();
-  const { colors, isDarkMode } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,14 +43,24 @@ export const AdminDashboard = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
+    const doLogout = async () => {
+      await logout();
+      navigation.replace('Login');
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('¿Deseas cerrar sesión?');
+      if (ok) {
+        await doLogout();
+      }
+      return;
+    }
+
     Alert.alert('Cerrar sesión', '¿Deseas cerrar sesión?', [
       { text: 'Cancelar', onPress: () => {} },
       {
         text: 'Cerrar',
-        onPress: async () => {
-          await logout();
-          navigation.replace('Login');
-        },
+        onPress: doLogout,
       },
     ]);
   };
@@ -124,9 +135,18 @@ export const AdminDashboard = ({ navigation }) => {
             </Text>
             
           </View>
-          <TouchableOpacity onPress={handleLogout}>
-            <Icon name="logout" size={24} color={colors.error} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={toggleTheme}>
+              <Icon
+                name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+                size={24}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={{ marginLeft: 14 }}>
+              <Icon name="logout" size={24} color={colors.error} />
+            </TouchableOpacity>
+          </View>
         </View>
 
 

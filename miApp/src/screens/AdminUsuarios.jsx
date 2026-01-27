@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -11,15 +11,19 @@ import {
   FlatList,
   Modal,
   Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { AdminService } from '../services/AdminService';
 import { useTheme } from '../context/ThemeContext';
+import { useAppContext } from '../context/AppContext';
 
 export const AdminUsuarios = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
+  const { user: currentUser } = useAppContext();
   const [usuarios, setUsuarios] = useState([]);
+  const [totalUsuarios, setTotalUsuarios] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filteredUsuarios, setFilteredUsuarios] = useState([]);
@@ -31,78 +35,153 @@ export const AdminUsuarios = ({ navigation, route }) => {
   const [filterType, setFilterType] = useState('todos'); // 'todos', 'bloqueados'
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editRole, setEditRole] = useState('usuario');
   const [editDescription, setEditDescription] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [sortKey, setSortKey] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   useEffect(() => {
     // Si viene desde route params con filtro bloqueados
     if (route?.params?.blocked) {
       setFilterType('bloqueados');
     }
-    loadUsuarios();
   }, [route?.params?.blocked]);
 
   useEffect(() => {
-    filterUsuarios();
-  }, [search, usuarios, filterType]);
+    const timeoutId = setTimeout(() => {
+      loadUsuarios();
+    }, 350);
 
-  const loadUsuarios = async () => {
+    return () => clearTimeout(timeoutId);
+  }, [search, filterType]);
+
+  const loadUsuarios = useCallback(async () => {
     try {
       setLoading(true);
       const blocked = filterType === 'bloqueados' ? true : null;
       const response = await AdminService.getUsuarios(1, search, '', blocked);
       const usuariosData = response.data || response;
       const items = Array.isArray(usuariosData) ? usuariosData : usuariosData.data || [];
+
+      setTotalUsuarios(
+        typeof usuariosData?.total === 'number' ? usuariosData.total : null
+      );
       setUsuarios(items);
+      setFilteredUsuarios(items);
     } catch (error) {
       console.error('Error cargando usuarios:', error);
       Alert.alert('Error', 'No se pudieron cargar los usuarios');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType, search]);
 
-  const filterUsuarios = () => {
-    let filtered = usuarios;
-    
-    // Filtrar por tipo
-    if (filterType === 'bloqueados') {
-      filtered = filtered.filter(u => u.is_blocked);
+  const sortedUsuarios = useMemo(() => {
+    const list = Array.isArray(filteredUsuarios) ? [...filteredUsuarios] : [];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    const asString = (value) => (value ?? '').toString().toLowerCase();
+    const asDate = (value) => {
+      const d = value ? new Date(value) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+    };
+
+    list.sort((a, b) => {
+      if (sortKey === 'name') {
+        return asString(a?.name).localeCompare(asString(b?.name)) * dir;
+      }
+
+      if (sortKey === 'email') {
+        return asString(a?.email).localeCompare(asString(b?.email)) * dir;
+      }
+
+      if (sortKey === 'role') {
+        const roleOrder = (u) => (u?.role === 'admin' ? 0 : 1);
+        const diff = roleOrder(a) - roleOrder(b);
+        if (diff !== 0) return diff * dir;
+        return asString(a?.name).localeCompare(asString(b?.name)) * dir;
+      }
+
+      if (sortKey === 'status') {
+        const statusOrder = (u) => (u?.is_blocked ? 0 : 1);
+        const diff = statusOrder(a) - statusOrder(b);
+        if (diff !== 0) return diff * dir;
+        return asString(a?.name).localeCompare(asString(b?.name)) * dir;
+      }
+
+      // created_at (default)
+      return (asDate(a?.created_at) - asDate(b?.created_at)) * dir;
+    });
+
+    return list;
+  }, [filteredUsuarios, sortKey, sortDirection]);
+
+  const sortKeyLabel = useMemo(() => {
+    switch (sortKey) {
+      case 'name':
+        return 'Nombre';
+      case 'email':
+        return 'Correo';
+      case 'role':
+        return 'Rol';
+      case 'created_at':
+      default:
+        return 'Tiempo';
     }
-    
-    // Filtrar por búsqueda
-    if (search.trim()) {
-      filtered = filtered.filter(u =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    
-    setFilteredUsuarios(filtered);
-  };
+  }, [sortKey]);
+
+  const cycleSortKey = useCallback(() => {
+    setSortKey((prev) => {
+      if (prev === 'created_at') return 'name';
+      if (prev === 'name') return 'email';
+      if (prev === 'email') return 'role';
+      return 'created_at';
+    });
+  }, []);
+
+  const toggleSortDirection = useCallback(() => {
+    setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  }, []);
 
   const handleDeleteUser = (user) => {
-    Alert.alert(
-      'Eliminar usuario',
-      `¿Estás seguro de que deseas eliminar a ${user.name}? Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', onPress: () => {} },
-        {
-          text: 'Eliminar',
-          onPress: async () => {
-            try {
-              await AdminService.deleteUsuario(user.id);
-              Alert.alert('Éxito', 'Usuario eliminado');
-              loadUsuarios();
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar el usuario');
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    if (currentUser?.id && user?.id === currentUser.id) {
+      Alert.alert('Acción no permitida', 'No puedes eliminar tu propia cuenta desde aquí.');
+      return;
+    }
+
+    if (user?.role === 'admin') {
+      Alert.alert('Acción no permitida', 'No puedes eliminar cuentas de administrador.');
+      return;
+    }
+
+    const doDelete = async () => {
+      try {
+        await AdminService.deleteUsuario(user.id);
+        Alert.alert('Éxito', 'Usuario eliminado');
+        loadUsuarios();
+      } catch (error) {
+        const msg =
+          error?.response?.data?.message ||
+          error?.message ||
+          'No se pudo eliminar el usuario';
+        Alert.alert('Error', msg);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm(
+        `¿Estás seguro de que deseas eliminar a ${user.name}? Esta acción no se puede deshacer.`
+      );
+      if (ok) {
+        void doDelete();
+      }
+      return;
+    }
+
+    Alert.alert('Eliminar usuario', `¿Estás seguro de que deseas eliminar a ${user.name}? Esta acción no se puede deshacer.`, [
+      { text: 'Cancelar', onPress: () => {}, style: 'cancel' },
+      { text: 'Eliminar', onPress: doDelete, style: 'destructive' },
+    ]);
   };
 
   const handleBlockUser = async () => {
@@ -123,30 +202,37 @@ export const AdminUsuarios = ({ navigation, route }) => {
   };
 
   const handleUnblockUser = async (user) => {
-    Alert.alert(
-      'Desbloquear usuario',
-      `¿Desbloquear a ${user.name}?`,
-      [
-        { text: 'Cancelar', onPress: () => {} },
-        {
-          text: 'Desbloquear',
-          onPress: async () => {
-            try {
-              await AdminService.unblockUsuario(user.id);
-              Alert.alert('Éxito', 'Usuario desbloqueado');
-              loadUsuarios();
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo desbloquear el usuario');
-            }
-          },
-        },
-      ]
-    );
+    const doUnblock = async () => {
+      try {
+        await AdminService.unblockUsuario(user.id);
+        Alert.alert('Éxito', 'Usuario desbloqueado');
+        loadUsuarios();
+      } catch (error) {
+        const msg =
+          error?.response?.data?.message ||
+          error?.message ||
+          'No se pudo desbloquear el usuario';
+        Alert.alert('Error', msg);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const ok = window.confirm(`¿Desbloquear a ${user.name}?`);
+      if (ok) {
+        void doUnblock();
+      }
+      return;
+    }
+
+    Alert.alert('Desbloquear usuario', `¿Desbloquear a ${user.name}?`, [
+      { text: 'Cancelar', onPress: () => {}, style: 'cancel' },
+      { text: 'Desbloquear', onPress: doUnblock },
+    ]);
   };
 
   const handleEditUser = async () => {
     if (!editName.trim() || !editEmail.trim()) {
-      Alert.alert('Error', 'El nombre y email son requeridos');
+      Alert.alert('Error', 'El nombre y el correo son requeridos');
       return;
     }
 
@@ -155,7 +241,6 @@ export const AdminUsuarios = ({ navigation, route }) => {
       await AdminService.updateUsuario(selectedUser.id, {
         name: editName,
         email: editEmail,
-        role: editRole,
         descripcion: editDescription,
       });
       Alert.alert('Éxito', 'Usuario actualizado');
@@ -172,12 +257,17 @@ export const AdminUsuarios = ({ navigation, route }) => {
     setSelectedUser(user);
     setEditName(user.name);
     setEditEmail(user.email);
-    setEditRole(user.role || 'usuario');
     setEditDescription(user.descripcion || '');
     setShowEditModal(true);
   };
 
   const UserCard = ({ user, onPress }) => (
+    (() => {
+      const isSelf = Boolean(currentUser?.id) && user?.id === currentUser.id;
+      const isAdminTarget = user?.role === 'admin';
+      const canDelete = !isSelf && !isAdminTarget;
+
+      return (
     <TouchableOpacity
       style={[
         styles.userCard,
@@ -186,21 +276,48 @@ export const AdminUsuarios = ({ navigation, route }) => {
       onPress={onPress}
     >
       <View style={styles.userHeader}>
-        <Image
-          source={{ uri: user.imagen_perfil || 'https://via.placeholder.com/48' }}
-          style={styles.avatar}
-        />
+        {user.imagen_perfil ? (
+          <Image source={{ uri: user.imagen_perfil }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Icon name="account" size={22} color={colors.textSecondary} />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
           <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
             {user.email}
           </Text>
         </View>
-        {user.is_blocked && (
-          <View style={[styles.badge, { backgroundColor: colors.error }]}>
-            <Icon name="lock" size={16} color="#fff" />
+        <View style={styles.badgeRow}>
+          <View
+            style={[
+              styles.roleBadge,
+              {
+                borderColor: colors.border,
+                backgroundColor:
+                  user.role === 'admin' ? colors.primary + '20' : colors.surface,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.roleBadgeText,
+                {
+                  color: user.role === 'admin' ? colors.primary : colors.textSecondary,
+                },
+              ]}
+            >
+              {(user.role || 'usuario').toUpperCase()}
+            </Text>
           </View>
-        )}
+
+          {user.is_blocked && (
+            <View style={[styles.badge, { backgroundColor: colors.error }]}>
+              <Icon name="lock" size={16} color="#fff" />
+            </View>
+          )}
+        </View>
       </View>
       <View style={styles.userActions}>
         <TouchableOpacity
@@ -233,12 +350,17 @@ export const AdminUsuarios = ({ navigation, route }) => {
 
         <TouchableOpacity
           onPress={() => handleDeleteUser(user)}
-          style={[styles.actionButton, { backgroundColor: colors.error + '20' }]}
+          style={[
+            styles.actionButton,
+            { backgroundColor: colors.error + '20', opacity: canDelete ? 1 : 0.45 },
+          ]}
         >
           <Icon name="delete" size={18} color={colors.error} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
+      );
+    })()
   );
 
   if (loading) {
@@ -254,16 +376,25 @@ export const AdminUsuarios = ({ navigation, route }) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.primary }]}> 
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color={colors.text} />
+          <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
+        <Text style={[styles.headerTitle, { color: '#fff' }]}>
           Gestionar Usuarios
         </Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AdminDashboard')}>
-          <Icon name="home" size={24} color={colors.text} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={toggleTheme}>
+            <Icon
+              name={isDarkMode ? 'weather-night' : 'white-balance-sunny'}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('AdminDashboard')} style={{ marginLeft: 14 }}>
+            <Icon name="home" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filtros */}
@@ -332,9 +463,42 @@ export const AdminUsuarios = ({ navigation, route }) => {
         />
       </View>
 
+      {/* Meta + orden */}
+      <View style={styles.metaRow}>
+        <Text style={[styles.countText, { color: colors.textSecondary }]}>
+          {typeof totalUsuarios === 'number'
+            ? `Total: ${totalUsuarios} • Mostrando: ${sortedUsuarios.length}`
+            : `Mostrando: ${sortedUsuarios.length}`}
+        </Text>
+        <View style={styles.sortControls}>
+          <TouchableOpacity
+            style={[styles.sortButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+            onPress={cycleSortKey}
+            activeOpacity={0.85}
+          >
+            <Icon name="filter-variant" size={18} color={colors.text} />
+            <Text style={[styles.sortButtonText, { color: colors.text }]} numberOfLines={1}>
+              {sortKeyLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.directionButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+            onPress={toggleSortDirection}
+            activeOpacity={0.85}
+          >
+            <Icon
+              name={sortDirection === 'asc' ? 'arrow-down' : 'arrow-up'}
+              size={18}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Lista de usuarios */}
       <FlatList
-        data={filteredUsuarios}
+        data={sortedUsuarios}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => <UserCard user={item} onPress={() => {}} />}
         contentContainerStyle={styles.listContent}
@@ -359,24 +523,21 @@ export const AdminUsuarios = ({ navigation, route }) => {
             
             <Text style={[styles.label, { color: colors.text }]}>Nombre</Text>
             <TextInput
-                
               style={[styles.modalInput, { color: colors.text, borderColor: colors.border }]}
-              
               placeholderTextColor={colors.textSecondary}
               value={editName}
               onChangeText={setEditName}
             />
-            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
 
+            <Text style={[styles.label, { color: colors.text }]}>Correo</Text>
             <TextInput
               style={[styles.modalInput, { color: colors.text, borderColor: colors.border }]}
-              
               placeholderTextColor={colors.textSecondary}
               value={editEmail}
               onChangeText={setEditEmail}
               keyboardType="email-address"
+              autoCapitalize="none"
             />
-
             
             <Text style={[styles.label, { color: colors.text }]}>Descripción</Text>
 
@@ -466,7 +627,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 18,
@@ -511,6 +671,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  sortControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxWidth: 190,
+  },
+  sortButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  directionButton: {
+    width: 40,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   userCard: {
     borderRadius: 12,
     padding: 12,
@@ -528,6 +728,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     marginRight: 12,
   },
+  avatarFallback: {
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   userName: {
     fontSize: 16,
     fontWeight: '600',
@@ -542,6 +747,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roleBadge: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+  },
+  roleBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   userActions: {
     flexDirection: 'row',
@@ -611,31 +832,6 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  roleSelector: {
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  roleSelectorLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  roleButttons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  roleButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  roleButtonText: {
-    fontSize: 13,
     fontWeight: '600',
   },
 });

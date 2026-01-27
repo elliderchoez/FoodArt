@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -18,11 +18,14 @@ import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import apiClient from '../services/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import StarRating from '../components/StarRating';
 import { AdminService } from '../services/AdminService';
 import { SharingService } from '../services/SharingService';
+import { ReportModal } from '../components/ReportModal';
+import { ReportService } from '../services/ReportService';
 
 const IngredienteItem = ({ ingrediente, index, colors }) => (
   <View style={styles.ingredienteItem}>
@@ -42,7 +45,7 @@ const PasoItem = ({ paso, index, colors }) => (
   </View>
 );
 
-const ComentarioItem = ({ comentario, colors }) => (
+const ComentarioItem = ({ comentario, colors, canReport = false, hasReported = false, onReport }) => (
   <View style={[styles.comentarioItem, { backgroundColor: colors.cardBackground }]}>
     <View style={styles.comentarioHeader}>
       <Image
@@ -62,6 +65,20 @@ const ComentarioItem = ({ comentario, colors }) => (
           ))}
         </View>
       </View>
+
+      {canReport ? (
+        <TouchableOpacity
+          onPress={onReport}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ paddingLeft: 10, paddingVertical: 2 }}
+        >
+          <MaterialCommunityIcons
+            name={hasReported ? 'flag' : 'flag-outline'}
+            size={20}
+            color={hasReported ? colors.error : colors.textSecondary}
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
     <Text style={[styles.comentarioText, { color: colors.textSecondary }]}>{comentario.contenido}</Text>
   </View>
@@ -71,11 +88,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const { colors, isDarkMode } = useTheme();
   const { receta, recetaId, isAdmin } = route.params || {};
   
-  // Logging para debugging
-  console.log('DetalleRecetaScreen - route.params:', route.params);
-  console.log('DetalleRecetaScreen - recetaId extraído:', recetaId);
-  console.log('DetalleRecetaScreen - receta extraída:', receta);
-  
+
   const [loading, setLoading] = useState(false);
   const [recetaCompleta, setRecetaCompleta] = useState({
     ...receta,
@@ -88,8 +101,16 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [nuevaCalificacion, setNuevaCalificacion] = useState(0);
   const [mostrarModalResena, setMostrarModalResena] = useState(false);
   const [token, setToken] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [siguiendo, setSiguiendo] = useState(false);
   const [esMiReceta, setEsMiReceta] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [commentReporting, setCommentReporting] = useState(false);
+  const [commentToReport, setCommentToReport] = useState(null);
+  const [reportedCommentMap, setReportedCommentMap] = useState({});
   const [showAdminOptions, setShowAdminOptions] = useState(false);
   const [deletingReceta, setDeletingReceta] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -100,7 +121,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [editTiempoPreparacion, setEditTiempoPreparacion] = useState('');
   const [editPorciones, setEditPorciones] = useState('');
   const [editDificultad, setEditDificultad] = useState('medio');
-  const [editCategoria, setEditCategoria] = useState('');
+  const [editTipoDieta, setEditTipoDieta] = useState('mixta');
   const [blockReason, setBlockReason] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
@@ -112,25 +133,21 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     const inicializar = async () => {
       const tk = await AsyncStorage.getItem('authToken');
       setToken(tk);
-      
-      console.log('DetalleRecetaScreen inicializando - recetaId:', recetaId, 'receta:', receta?.id);
+
+      if (tk) {
+        try {
+          const { data: userData } = await apiClient.get(`/user`);
+          setCurrentUserId(userData?.id ?? null);
+        } catch (error) {
+          console.error('Error obteniendo usuario:', error);
+        }
+      }
       
       // Si viene solo recetaId, cargar directamente
       if (recetaId && !receta) {
-        console.log('Cargando con recetaId:', recetaId);
         await cargarDetalleReceta(tk, recetaId);
         await cargarComentarios(recetaId);
       } else if (receta) {
-        console.log('Cargando con receta.id:', receta.id);
-        // Obtener usuario actual para saber si es su receta
-        if (tk) {
-          try {
-            const { data: userData } = await apiClient.get(`/user`);
-            setEsMiReceta(userData.id === receta.user_id);
-          } catch (error) {
-            console.error('Error obteniendo usuario:', error);
-          }
-        }
         
         // Ahora cargar receta con el token disponible
         await cargarDetalleReceta(tk, receta.id);
@@ -139,6 +156,167 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     };
     inicializar();
   }, []);
+
+  // Sincronizar esMiReceta cuando currentUserId cambie
+  useEffect(() => {
+    if (currentUserId && recetaCompleta?.user_id) {
+      setEsMiReceta(currentUserId === recetaCompleta.user_id);
+    }
+  }, [currentUserId, recetaCompleta?.user_id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const id = recetaCompleta?.id || receta?.id || recetaId;
+      if (!id) return;
+      // Al volver a la pantalla (o al enfocarla), refrescar para reflejar eliminaciones/bloqueos.
+      cargarDetalleReceta(token, id);
+      cargarComentarios(id);
+    }, [recetaCompleta?.id, receta?.id, recetaId, token])
+  );
+
+  useEffect(() => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    if (!id) return;
+
+    const key = `reported:receta:${id}`;
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (v === '1') setHasReported(true);
+      })
+      .catch(() => {});
+  }, [recetaCompleta?.id, receta?.id, recetaId]);
+
+  const recetaReportReasons = [
+    { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Lenguaje ofensivo, violencia, etc.' },
+    { key: 'spam', label: 'Spam', help: 'Publicidad o contenido repetitivo.' },
+    { key: 'falso', label: 'Información falsa', help: 'Datos engañosos o peligrosos.' },
+    { key: 'plagios', label: 'Plagio', help: 'Copia sin atribución.' },
+    { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+  ];
+
+  const commentReportReasons = useMemo(
+    () => [
+      { key: 'inapropiado', label: 'Contenido inapropiado', help: 'Lenguaje ofensivo, insultos, etc.' },
+      { key: 'spam', label: 'Spam', help: 'Publicidad o contenido repetitivo.' },
+      { key: 'acoso', label: 'Acoso', help: 'Ataques o intimidación.' },
+      { key: 'otro', label: 'Otro', help: 'Especifica el motivo.' },
+    ],
+    []
+  );
+
+  const openReport = () => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const submitRecetaReport = async ({ reason, description }) => {
+    const id = recetaCompleta?.id || receta?.id || recetaId;
+    const key = id ? `reported:receta:${id}` : null;
+
+    try {
+      setReporting(true);
+      await ReportService.reportReceta(id, reason, description);
+      setHasReported(true);
+      if (key) {
+        await AsyncStorage.setItem(key, '1');
+      }
+      setShowReportModal(false);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      // Si el backend responde que ya existe, también lo marcamos como reportado.
+      const status = error?.response?.status;
+      if (status === 409) {
+        setHasReported(true);
+        if (key) {
+          try {
+            await AsyncStorage.setItem(key, '1');
+          } catch {}
+        }
+        setShowReportModal(false);
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  useEffect(() => {
+    const items = Array.isArray(comentarios) ? comentarios : [];
+    if (!items.length) {
+      setReportedCommentMap({});
+      return;
+    }
+
+    const keys = items
+      .map((c) => c?.id)
+      .filter(Boolean)
+      .map((id) => `reported:comentario:${id}`);
+
+    if (!keys.length) return;
+
+    AsyncStorage.multiGet(keys)
+      .then((pairs) => {
+        const next = {};
+        for (const [k, v] of pairs) {
+          if (v === '1') {
+            const idStr = (k || '').split(':').pop();
+            if (idStr) next[idStr] = true;
+          }
+        }
+        setReportedCommentMap(next);
+      })
+      .catch(() => {});
+  }, [comentarios]);
+
+  const openCommentReport = (comentario) => {
+    if (!token) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para reportar.');
+      return;
+    }
+    if (!comentario?.id) return;
+    setCommentToReport(comentario);
+    setShowCommentReportModal(true);
+  };
+
+  const submitCommentReport = async ({ reason, description }) => {
+    const comentarioId = commentToReport?.id;
+    if (!comentarioId) return;
+    const key = `reported:comentario:${comentarioId}`;
+
+    try {
+      setCommentReporting(true);
+      await ReportService.reportComentario(comentarioId, reason, description);
+      setReportedCommentMap((prev) => ({ ...prev, [String(comentarioId)]: true }));
+      try {
+        await AsyncStorage.setItem(key, '1');
+      } catch {}
+      setShowCommentReportModal(false);
+      setCommentToReport(null);
+      Alert.alert('Gracias', 'Tu reporte fue enviado.');
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 409) {
+        setReportedCommentMap((prev) => ({ ...prev, [String(comentarioId)]: true }));
+        try {
+          await AsyncStorage.setItem(key, '1');
+        } catch {}
+        setShowCommentReportModal(false);
+        setCommentToReport(null);
+        return;
+      }
+      const msg = error?.response?.data?.message || error?.message || 'No se pudo enviar el reporte';
+      Alert.alert('Error', msg);
+    } finally {
+      setCommentReporting(false);
+    }
+  };
 
   const obtenerToken = async () => {
     const tk = await AsyncStorage.getItem('authToken');
@@ -149,10 +327,8 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const cargarDetalleReceta = async (tk = null, id = null) => {
     try {
       const recetaId = id || receta?.id;
-      console.log('cargarDetalleReceta - id pasado:', id, ', receta?.id:', receta?.id, ', recetaId final:', recetaId);
       
       if (!recetaId) {
-        console.error('No hay ID de receta para cargar');
         Alert.alert('Error', 'No se pudo cargar la receta');
         return;
       }
@@ -168,10 +344,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       setLiked(data.user_liked || false);
       setSaved(data.user_saved || false);
       setSiguiendo(data.user_follows_author || false);
-      console.log('Receta cargada:', data);
-      console.log('user_liked:', data.user_liked, 'user_saved:', data.user_saved);
     } catch (error) {
-      console.error('Error cargando detalle:', error);
       Alert.alert('Error', 'No se pudo cargar la receta');
     }
   };
@@ -179,18 +352,14 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const cargarComentarios = async (id = null) => {
     try {
       const recetaId = id || receta?.id || recetaCompleta?.id;
-      console.log('cargarComentarios - id pasado:', id, ', receta?.id:', receta?.id, ', recetaCompleta?.id:', recetaCompleta?.id, ', recetaId final:', recetaId);
       
       if (!recetaId) {
-        console.warn('No hay ID de receta para cargar comentarios');
         return;
       }
       
       const { data } = await apiClient.get(`/comentarios/${recetaId}`);
-      console.log('Comentarios cargados:', data);
       setComentarios(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
-      console.error('Error cargando comentarios:', error.response?.status, error.message, error);
       setComentarios([]);
     }
   };
@@ -263,7 +432,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       cargarDetalleReceta();
     } catch (error) {
       console.error('Error publicando comentario:', error);
-      Alert.alert('Error', 'No se pudo publicar el comentario');
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo publicar el comentario';
+      Alert.alert('Error', msg);
     }
   };
 
@@ -308,13 +481,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           onPress: async () => {
             try {
               setDeletingReceta(true);
-              console.log('Eliminando receta:', recetaCompleta.id);
-              await AdminService.deleteReceta(recetaCompleta.id);
+              await apiClient.delete(`/recetas/${recetaCompleta.id}`);
               Alert.alert('Éxito', 'Receta eliminada', [
                 { text: 'OK', onPress: () => navigation.goBack() }
               ]);
             } catch (error) {
-              console.error('Error eliminando receta:', error);
               Alert.alert('Error', 'No se pudo eliminar la receta');
             } finally {
               setDeletingReceta(false);
@@ -327,9 +498,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   }, [recetaCompleta.id, navigation]);
 
   const handleBlockReceta = useCallback(() => {
-    console.log('handleBlockReceta ejecutada - is_blocked:', recetaCompleta.is_blocked);
     const isBlocked = recetaCompleta.is_blocked;
-    
     if (isBlocked) {
       // Si ya está bloqueada, solo desbloquear
       Alert.alert(
@@ -342,7 +511,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             onPress: async () => {
               try {
                 setBlockingReceta(true);
-                console.log('Desbloqueando receta:', recetaCompleta.id);
                 await AdminService.unblockReceta(recetaCompleta.id);
                 setRecetaCompleta({ ...recetaCompleta, is_blocked: false });
                 Alert.alert('Éxito', 'Receta desbloqueada');
@@ -358,7 +526,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       );
     } else {
       // Si no está bloqueada, abrir modal para pedir razón
-      console.log('Abriendo modal de bloqueo');
       setBlockModalReason('');
       setBlockModalVisible(true);
     }
@@ -372,7 +539,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
     try {
       setBlockingReceta(true);
-      console.log('Bloqueando receta:', recetaCompleta.id, 'Razón:', blockModalReason);
       await AdminService.blockReceta(recetaCompleta.id, blockModalReason);
       
       // Actualizar el estado de la receta
@@ -397,7 +563,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     setEditTiempoPreparacion((recetaCompleta.tiempo_preparacion || '').toString());
     setEditPorciones((recetaCompleta.porciones || '').toString());
     setEditDificultad(recetaCompleta.dificultad || 'medio');
-    setEditCategoria(recetaCompleta.categoria || '');
+    setEditTipoDieta(recetaCompleta.tipo_dieta || 'mixta');
     setEditIngredientes(Array.isArray(recetaCompleta.ingredientes) 
       ? recetaCompleta.ingredientes.join('\n') 
       : typeof recetaCompleta.ingredientes === 'string'
@@ -412,6 +578,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   };
 
   const handleEditReceta = async () => {
+    
     if (!editTitulo.trim() || !editDescripcion.trim()) {
       Alert.alert('Error', 'Título y descripción son requeridos');
       return;
@@ -421,27 +588,31 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       setEditLoading(true);
       const ingredientesArray = editIngredientes.split('\n').filter(i => i.trim());
       const pasosArray = editPasos.split('\n').filter(p => p.trim());
-      const tiempoPreparacion = parseInt(editTiempoPreparacion) || null;
+      const tiempoPreparacion = editTiempoPreparacion || null; // Mantener como string
       const porciones = parseInt(editPorciones) || null;
 
-      await AdminService.updateReceta(recetaCompleta.id, {
+      const payload = {
         titulo: editTitulo,
         descripcion: editDescripcion,
         tiempo_preparacion: tiempoPreparacion,
         porciones: porciones,
         dificultad: editDificultad,
-        categoria: editCategoria,
-        ingredientes: JSON.stringify(ingredientesArray),
-        pasos: JSON.stringify(pasosArray),
-      });
+        tipo_dieta: editTipoDieta,
+        ingredientes: ingredientesArray,
+        pasos: pasosArray,
+      };
+
+      // Usar la ruta de usuario en lugar de admin
+      const response = await apiClient.put(`/recetas/${recetaCompleta.id}`, payload);
 
       Alert.alert('Éxito', 'Receta actualizada');
       setShowEditModal(false);
       
       // Recargar la receta
-      await cargarDetalleReceta(token);
+      await cargarDetalleReceta(token, recetaCompleta.id);
     } catch (error) {
       console.error('Error editando receta:', error);
+      console.error('Error response:', error?.response?.data);
       Alert.alert('Error', 'No se pudo actualizar la receta');
     } finally {
       setEditLoading(false);
@@ -513,15 +684,45 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <TouchableOpacity 
           onPress={() => {
-            console.log('Back button pressed');
             navigation.goBack();
           }}
         >
           <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{recetaCompleta.titulo}</Text>
-        <View style={{ width: 28 }} />
+        {!esMiReceta && !isAdmin ? (
+          <TouchableOpacity onPress={openReport} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons
+              name={hasReported ? 'flag' : 'flag-outline'}
+              size={26}
+              color={hasReported ? colors.error : colors.text}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 28 }} />
+        )}
       </View>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Reportar receta"
+        reasons={recetaReportReasons}
+        submitting={reporting}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitRecetaReport}
+      />
+
+      <ReportModal
+        visible={showCommentReportModal}
+        title="Reportar comentario"
+        reasons={commentReportReasons}
+        submitting={commentReporting}
+        onClose={() => {
+          setShowCommentReportModal(false);
+          setCommentToReport(null);
+        }}
+        onSubmit={submitCommentReport}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Imagen */}
@@ -604,7 +805,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
         {/* Opciones Admin */}
         {isAdmin && (
-          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
             <Text style={[styles.adminTitle, { color: colors.text }]}>Opciones de Admin</Text>
             <View style={styles.adminButtons}>
               <TouchableOpacity
@@ -634,6 +835,37 @@ export default function DetalleRecetaScreen({ route, navigation }) {
                     </Text>
                   </>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: '#FF4757', opacity: deletingReceta ? 0.5 : 1 }]}
+                onPress={handleDeleteReceta}
+                disabled={deletingReceta}
+              >
+                {deletingReceta ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="trash-can" size={18} color="#fff" />
+                    <Text style={styles.adminButtonText}>Eliminar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Opciones para el dueño de la receta */}
+        {esMiReceta && !isAdmin && (
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
+            <Text style={[styles.adminTitle, { color: colors.text }]}>Tus opciones</Text>
+            <View style={styles.adminButtons}>
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: colors.primary }]}
+                onPress={openEditModal}
+              >
+                <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+                <Text style={styles.adminButtonText}>Editar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -735,7 +967,15 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             <FlatList
               data={comentarios}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => <ComentarioItem comentario={item} colors={colors} />}
+              renderItem={({ item }) => (
+                <ComentarioItem
+                  comentario={item}
+                  colors={colors}
+                  canReport={!!token && !isAdmin && currentUserId != null && item?.user_id !== currentUserId}
+                  hasReported={!!reportedCommentMap?.[String(item?.id)]}
+                  onReport={() => openCommentReport(item)}
+                />
+              )}
               scrollEnabled={false}
             />
           )}
@@ -875,14 +1115,21 @@ export default function DetalleRecetaScreen({ route, navigation }) {
               </Picker>
             </View>
 
-            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Categoría</Text>
-            <TextInput
-              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
-              placeholder="Ej: Postres"
-              placeholderTextColor={colors.textSecondary}
-              value={editCategoria}
-              onChangeText={setEditCategoria}
-            />
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Tipo de Dieta</Text>
+            <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
+              <Picker
+                selectedValue={editTipoDieta}
+                onValueChange={setEditTipoDieta}
+                style={{ color: colors.text }}
+              >
+                <Picker.Item label="Mixta" value="mixta" />
+                <Picker.Item label="Carnes" value="carnes" />
+                <Picker.Item label="Gym" value="gym" />
+                <Picker.Item label="Vegetariana" value="vegetariana" />
+                <Picker.Item label="Vegana" value="vegana" />
+                <Picker.Item label="Bajar Peso" value="bajar_peso" />
+              </Picker>
+            </View>
 
             <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Ingredientes (uno por línea)</Text>
             <TextInput

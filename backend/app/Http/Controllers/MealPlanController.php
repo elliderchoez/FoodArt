@@ -144,6 +144,14 @@ class MealPlanController extends Controller
             'porciones' => 'required|integer|min:1',
         ]);
 
+        // Verificar que el plan no exceda 3 recetas
+        $totalRecetas = $mealPlan->items()->count();
+        if ($totalRecetas >= 3) {
+            return response()->json([
+                'message' => 'El plan de comidas no puede contener más de 3 recetas',
+            ], 422);
+        }
+
         // Verificar que no exista ya la combinación
         $existe = MealPlanItem::where([
             'meal_plan_id' => $mealPlan->id,
@@ -243,12 +251,10 @@ class MealPlanController extends Controller
 
     /**
      * Generar recetas personalizadas basadas en preferencias
+     * Ahora genera solo 3 recetas máximo
      */
     private function generarRecetasPersonalizadas(MealPlan $plan)
     {
-        $dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
-        $comidas = ['desayuno', 'almuerzo', 'merienda', 'cena'];
-
         // Obtener recetas filtradas
         $recetas = $this->filtrarRecetas($plan);
 
@@ -258,37 +264,19 @@ class MealPlanController extends Controller
         }
 
         $recetasArray = $recetas->toArray();
-        $contador = 0;
+        $diasAsignacion = ['lunes', 'martes', 'miercoles']; // Solo 3 días
+        $comidaPrincipal = 'almuerzo'; // Asignar todas a almuerzo
 
-        // Asignar recetas a los días y comidas
-        foreach ($dias as $dia) {
-            foreach ($comidas as $comida) {
-                if ($contador < count($recetasArray)) {
-                    $receta = $recetasArray[$contador];
-                    MealPlanItem::create([
-                        'meal_plan_id' => $plan->id,
-                        'receta_id' => $receta['id'],
-                        'dia' => $dia,
-                        'comida' => $comida,
-                        'porciones' => 1,
-                    ]);
-                    $contador++;
-                } else {
-                    // Volver a iniciar si se acabaron las recetas
-                    $contador = 0;
-                    if (count($recetasArray) > 0) {
-                        $receta = $recetasArray[$contador];
-                        MealPlanItem::create([
-                            'meal_plan_id' => $plan->id,
-                            'receta_id' => $receta['id'],
-                            'dia' => $dia,
-                            'comida' => $comida,
-                            'porciones' => 1,
-                        ]);
-                        $contador++;
-                    }
-                }
-            }
+        // Asignar solo 3 recetas máximo
+        for ($i = 0; $i < min(3, count($recetasArray)); $i++) {
+            $receta = $recetasArray[$i];
+            MealPlanItem::create([
+                'meal_plan_id' => $plan->id,
+                'receta_id' => $receta['id'],
+                'dia' => $diasAsignacion[$i],
+                'comida' => $comidaPrincipal,
+                'porciones' => 1,
+            ]);
         }
     }
 
