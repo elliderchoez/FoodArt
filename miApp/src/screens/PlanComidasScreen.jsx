@@ -67,10 +67,19 @@ const PlanCard = ({ plan, onDelete, colors, onPress, expanded, onRecetaPress }) 
         <View style={styles.statItem}>
           <MaterialCommunityIcons name="silverware-fork-knife" size={16} color={colors.primary} />
           <Text style={[styles.statText, { color: colors.textSecondary }]}>
-            {Math.min(5, plan.items?.length || 0)} recetas
+            {plan.items?.length || 0}/3 recetas
           </Text>
         </View>
       </View>
+
+      {plan.items?.length >= 3 && (
+        <View style={[styles.maxRecetasWarning, { backgroundColor: colors.primary + '20' }]}>
+          <MaterialCommunityIcons name="check-circle" size={16} color={colors.primary} />
+          <Text style={[styles.maxRecetasText, { color: colors.primary }]}>
+            Plan completo con 3 recetas
+          </Text>
+        </View>
+      )}
 
       <View style={styles.planActions}>
         <TouchableOpacity
@@ -89,7 +98,7 @@ const PlanCard = ({ plan, onDelete, colors, onPress, expanded, onRecetaPress }) 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recetasScroll}>
           <View style={styles.recetasHorizontal}>
             {plan.items?.length > 0 ? (
-              plan.items.slice(0, 5).map((item) => (
+              plan.items.map((item) => (
                 <RecetaEnPlan 
                   key={item.id} 
                   item={item} 
@@ -414,7 +423,7 @@ export const PlanComidasScreen = ({ navigation: navigationProp }) => {
                   />
 
                   <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                    💡 La app analizará todas las recetas y seleccionará automáticamente las que coincidan con tus preferencias.
+                    💡 La app analizará todas las recetas y seleccionará automáticamente las 3 mejores que coincidan con tus preferencias.
                   </Text>
                 </>
               )}
@@ -572,6 +581,19 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
+  },
+  maxRecetasWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  maxRecetasText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   planActions: {
     flexDirection: 'row',
