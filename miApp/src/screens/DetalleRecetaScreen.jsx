@@ -88,11 +88,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const { colors, isDarkMode } = useTheme();
   const { receta, recetaId, isAdmin } = route.params || {};
   
-  // Logging para debugging
-  console.log('DetalleRecetaScreen - route.params:', route.params);
-  console.log('DetalleRecetaScreen - recetaId extraído:', recetaId);
-  console.log('DetalleRecetaScreen - receta extraída:', receta);
-  
+
   const [loading, setLoading] = useState(false);
   const [recetaCompleta, setRecetaCompleta] = useState({
     ...receta,
@@ -125,7 +121,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const [editTiempoPreparacion, setEditTiempoPreparacion] = useState('');
   const [editPorciones, setEditPorciones] = useState('');
   const [editDificultad, setEditDificultad] = useState('medio');
-  const [editCategoria, setEditCategoria] = useState('');
+  const [editTipoDieta, setEditTipoDieta] = useState('mixta');
   const [blockReason, setBlockReason] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
@@ -147,25 +143,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
         }
       }
       
-      console.log('DetalleRecetaScreen inicializando - recetaId:', recetaId, 'receta:', receta?.id);
-      
       // Si viene solo recetaId, cargar directamente
       if (recetaId && !receta) {
-        console.log('Cargando con recetaId:', recetaId);
         await cargarDetalleReceta(tk, recetaId);
         await cargarComentarios(recetaId);
       } else if (receta) {
-        console.log('Cargando con receta.id:', receta.id);
-        // Obtener usuario actual para saber si es su receta
-        if (tk) {
-          try {
-            const { data: userData } = await apiClient.get(`/user`);
-            setCurrentUserId(userData?.id ?? null);
-            setEsMiReceta(userData.id === receta.user_id);
-          } catch (error) {
-            console.error('Error obteniendo usuario:', error);
-          }
-        }
         
         // Ahora cargar receta con el token disponible
         await cargarDetalleReceta(tk, receta.id);
@@ -174,6 +156,13 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     };
     inicializar();
   }, []);
+
+  // Sincronizar esMiReceta cuando currentUserId cambie
+  useEffect(() => {
+    if (currentUserId && recetaCompleta?.user_id) {
+      setEsMiReceta(currentUserId === recetaCompleta.user_id);
+    }
+  }, [currentUserId, recetaCompleta?.user_id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -338,10 +327,8 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const cargarDetalleReceta = async (tk = null, id = null) => {
     try {
       const recetaId = id || receta?.id;
-      console.log('cargarDetalleReceta - id pasado:', id, ', receta?.id:', receta?.id, ', recetaId final:', recetaId);
       
       if (!recetaId) {
-        console.error('No hay ID de receta para cargar');
         Alert.alert('Error', 'No se pudo cargar la receta');
         return;
       }
@@ -357,10 +344,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       setLiked(data.user_liked || false);
       setSaved(data.user_saved || false);
       setSiguiendo(data.user_follows_author || false);
-      console.log('Receta cargada:', data);
-      console.log('user_liked:', data.user_liked, 'user_saved:', data.user_saved);
     } catch (error) {
-      console.error('Error cargando detalle:', error);
       Alert.alert('Error', 'No se pudo cargar la receta');
     }
   };
@@ -368,18 +352,14 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   const cargarComentarios = async (id = null) => {
     try {
       const recetaId = id || receta?.id || recetaCompleta?.id;
-      console.log('cargarComentarios - id pasado:', id, ', receta?.id:', receta?.id, ', recetaCompleta?.id:', recetaCompleta?.id, ', recetaId final:', recetaId);
       
       if (!recetaId) {
-        console.warn('No hay ID de receta para cargar comentarios');
         return;
       }
       
       const { data } = await apiClient.get(`/comentarios/${recetaId}`);
-      console.log('Comentarios cargados:', data);
       setComentarios(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
-      console.error('Error cargando comentarios:', error.response?.status, error.message, error);
       setComentarios([]);
     }
   };
@@ -501,13 +481,11 @@ export default function DetalleRecetaScreen({ route, navigation }) {
           onPress: async () => {
             try {
               setDeletingReceta(true);
-              console.log('Eliminando receta:', recetaCompleta.id);
-              await AdminService.deleteReceta(recetaCompleta.id);
+              await apiClient.delete(`/recetas/${recetaCompleta.id}`);
               Alert.alert('Éxito', 'Receta eliminada', [
                 { text: 'OK', onPress: () => navigation.goBack() }
               ]);
             } catch (error) {
-              console.error('Error eliminando receta:', error);
               Alert.alert('Error', 'No se pudo eliminar la receta');
             } finally {
               setDeletingReceta(false);
@@ -520,9 +498,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   }, [recetaCompleta.id, navigation]);
 
   const handleBlockReceta = useCallback(() => {
-    console.log('handleBlockReceta ejecutada - is_blocked:', recetaCompleta.is_blocked);
     const isBlocked = recetaCompleta.is_blocked;
-    
     if (isBlocked) {
       // Si ya está bloqueada, solo desbloquear
       Alert.alert(
@@ -535,7 +511,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
             onPress: async () => {
               try {
                 setBlockingReceta(true);
-                console.log('Desbloqueando receta:', recetaCompleta.id);
                 await AdminService.unblockReceta(recetaCompleta.id);
                 setRecetaCompleta({ ...recetaCompleta, is_blocked: false });
                 Alert.alert('Éxito', 'Receta desbloqueada');
@@ -551,7 +526,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       );
     } else {
       // Si no está bloqueada, abrir modal para pedir razón
-      console.log('Abriendo modal de bloqueo');
       setBlockModalReason('');
       setBlockModalVisible(true);
     }
@@ -565,7 +539,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
     try {
       setBlockingReceta(true);
-      console.log('Bloqueando receta:', recetaCompleta.id, 'Razón:', blockModalReason);
       await AdminService.blockReceta(recetaCompleta.id, blockModalReason);
       
       // Actualizar el estado de la receta
@@ -590,7 +563,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
     setEditTiempoPreparacion((recetaCompleta.tiempo_preparacion || '').toString());
     setEditPorciones((recetaCompleta.porciones || '').toString());
     setEditDificultad(recetaCompleta.dificultad || 'medio');
-    setEditCategoria(recetaCompleta.categoria || '');
+    setEditTipoDieta(recetaCompleta.tipo_dieta || 'mixta');
     setEditIngredientes(Array.isArray(recetaCompleta.ingredientes) 
       ? recetaCompleta.ingredientes.join('\n') 
       : typeof recetaCompleta.ingredientes === 'string'
@@ -605,6 +578,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
   };
 
   const handleEditReceta = async () => {
+    
     if (!editTitulo.trim() || !editDescripcion.trim()) {
       Alert.alert('Error', 'Título y descripción son requeridos');
       return;
@@ -614,27 +588,31 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       setEditLoading(true);
       const ingredientesArray = editIngredientes.split('\n').filter(i => i.trim());
       const pasosArray = editPasos.split('\n').filter(p => p.trim());
-      const tiempoPreparacion = parseInt(editTiempoPreparacion) || null;
+      const tiempoPreparacion = editTiempoPreparacion || null; // Mantener como string
       const porciones = parseInt(editPorciones) || null;
 
-      await AdminService.updateReceta(recetaCompleta.id, {
+      const payload = {
         titulo: editTitulo,
         descripcion: editDescripcion,
         tiempo_preparacion: tiempoPreparacion,
         porciones: porciones,
         dificultad: editDificultad,
-        categoria: editCategoria,
-        ingredientes: JSON.stringify(ingredientesArray),
-        pasos: JSON.stringify(pasosArray),
-      });
+        tipo_dieta: editTipoDieta,
+        ingredientes: ingredientesArray,
+        pasos: pasosArray,
+      };
+
+      // Usar la ruta de usuario en lugar de admin
+      const response = await apiClient.put(`/recetas/${recetaCompleta.id}`, payload);
 
       Alert.alert('Éxito', 'Receta actualizada');
       setShowEditModal(false);
       
       // Recargar la receta
-      await cargarDetalleReceta(token);
+      await cargarDetalleReceta(token, recetaCompleta.id);
     } catch (error) {
       console.error('Error editando receta:', error);
+      console.error('Error response:', error?.response?.data);
       Alert.alert('Error', 'No se pudo actualizar la receta');
     } finally {
       setEditLoading(false);
@@ -706,7 +684,6 @@ export default function DetalleRecetaScreen({ route, navigation }) {
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <TouchableOpacity 
           onPress={() => {
-            console.log('Back button pressed');
             navigation.goBack();
           }}
         >
@@ -828,7 +805,7 @@ export default function DetalleRecetaScreen({ route, navigation }) {
 
         {/* Opciones Admin */}
         {isAdmin && (
-          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
             <Text style={[styles.adminTitle, { color: colors.text }]}>Opciones de Admin</Text>
             <View style={styles.adminButtons}>
               <TouchableOpacity
@@ -858,6 +835,37 @@ export default function DetalleRecetaScreen({ route, navigation }) {
                     </Text>
                   </>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: '#FF4757', opacity: deletingReceta ? 0.5 : 1 }]}
+                onPress={handleDeleteReceta}
+                disabled={deletingReceta}
+              >
+                {deletingReceta ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="trash-can" size={18} color="#fff" />
+                    <Text style={styles.adminButtonText}>Eliminar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Opciones para el dueño de la receta */}
+        {esMiReceta && !isAdmin && (
+          <View style={[styles.adminContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}> 
+            <Text style={[styles.adminTitle, { color: colors.text }]}>Tus opciones</Text>
+            <View style={styles.adminButtons}>
+              <TouchableOpacity
+                style={[styles.adminButton, { backgroundColor: colors.primary }]}
+                onPress={openEditModal}
+              >
+                <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+                <Text style={styles.adminButtonText}>Editar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1107,14 +1115,21 @@ export default function DetalleRecetaScreen({ route, navigation }) {
               </Picker>
             </View>
 
-            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Categoría</Text>
-            <TextInput
-              style={[styles.editInput, { color: colors.text, borderColor: colors.border }]}
-              placeholder="Ej: Postres"
-              placeholderTextColor={colors.textSecondary}
-              value={editCategoria}
-              onChangeText={setEditCategoria}
-            />
+            <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Tipo de Dieta</Text>
+            <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
+              <Picker
+                selectedValue={editTipoDieta}
+                onValueChange={setEditTipoDieta}
+                style={{ color: colors.text }}
+              >
+                <Picker.Item label="Mixta" value="mixta" />
+                <Picker.Item label="Carnes" value="carnes" />
+                <Picker.Item label="Gym" value="gym" />
+                <Picker.Item label="Vegetariana" value="vegetariana" />
+                <Picker.Item label="Vegana" value="vegana" />
+                <Picker.Item label="Bajar Peso" value="bajar_peso" />
+              </Picker>
+            </View>
 
             <Text style={[styles.labelText, { color: colors.text, marginTop: 16 }]}>Ingredientes (uno por línea)</Text>
             <TextInput

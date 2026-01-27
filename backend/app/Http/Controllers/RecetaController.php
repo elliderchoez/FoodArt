@@ -192,7 +192,7 @@ class RecetaController extends Controller
                 'dificultad' => 'sometimes|in:Fácil,Media,Difícil',
                 'ingredientes' => 'sometimes|array',
                 'pasos' => 'sometimes|array',
-                'categoria' => 'nullable|string|max:100',
+                'tipo_dieta' => 'nullable|in:vegana,vegetariana,carnes,gym,mixta,bajar_peso',
             ]);
 
             $receta->update($validated);
